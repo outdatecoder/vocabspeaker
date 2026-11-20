@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VocabSpeaker · 外语词汇听读</title>
+<style>
+/* 视觉方向：词汇讲义（纸 · 墨 · 荧光笔 · 印章）。
+   离线单文件、不引任何外部资源，字体只从系统自带的「楷体 + 拉丁衬线 + 等宽」里挑；
+   这是对"不用 Inter/Roboto/system-ui"那条通用规则的窄口径覆盖，理由就是离线。
+   下面每个变量只描述"颜色属于哪一层纸/哪一支笔"，不要写具体业务含义。 */
+:root{
+  --paper:#F6F2E7; --paper-2:#FFFCF3; --card:#FFFDF6;
+  --ink:#1D1A16; --mid:#4A443A; --dim:#8A8172;
+  --line:#DED5C0; --line2:#CBBFA3;
+  --marker:#F7DE58; --seal:#B23A2F; --moss:#4E6B3E; --prussian:#2C4A5E; --ochre:#8A6A2F;
+  --ok:#4E6B3E; --warn:#8A6A2F; --bad:#B23A2F;
+  --shadow:0 1px 0 rgba(29,26,22,.05),0 10px 26px -14px rgba(29,26,22,.35);
+  --shadow-lg:0 2px 0 rgba(29,26,22,.06),0 22px 44px -20px rgba(29,26,22,.45);
+  --radius:10px;
+  --serif:"Palatino Linotype",Palatino,Georgia,"KaiTi","STKaiti",serif;
+  --kai:"KaiTi","STKaiti","Kaiti SC",var(--serif);
+  --sans:"Microsoft YaHei","PingFang SC","Hiragino Sans GB",sans-serif;
+  --mono:ui-monospace,Consolas,"Courier New",monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  /* 纸：极淡的 32px 横格线。用 background 而不是覆盖层伪元素 ——
+     伪元素在 z-index:0 时会画到文字上面，横格线会穿过字。 */
+  background-color:var(--paper);
+  background-image:repeating-linear-gradient(to bottom,
+    transparent 0 31px, rgba(29,26,22,.045) 31px 32px);
+  color:var(--ink);
+  font:13.5px/1.65 var(--sans);
+  -webkit-font-smoothing:antialiased;
+}
+a{color:inherit;text-decoration:none}
+.hidden{display:none !important}
+.wrap{max-width:1080px;margin:0 auto;padding:0 22px 64px}
+
+/* ───────── 顶栏 ───────── */
+header.top{
+  position:sticky;top:0;z-index:20;
+  background:rgba(246,242,231,.88);
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--line);
+}
+.top-in{max-width:1080px;margin:0 auto;padding:12px 22px;
+  display:flex;align-items:center;gap:11px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:14px;
+  letter-spacing:.02em}
+.logo{width:30px;height:30px;border-radius:6px;flex:0 0 auto;
+  background:var(--ink);color:var(--paper-2);
+  display:flex;align-items:center;justify-content:center;font-size:12px;
+  box-shadow:0 2px 0 rgba(29,26,22,.25)}
+.top-right{margin-left:auto;font:11px/1.4 var(--mono);
+  color:var(--dim);text-align:right;white-space:nowrap;letter-spacing:-.01em}
+/* 右下角那颗苔绿在线点纯装饰（::before 不进 textContent，门禁读到的仍是纯文本） */
+.top-right::before{content:"";display:inline-block;width:6px;height:6px;
+  border-radius:50%;background:var(--moss);margin-right:7px;
+  vertical-align:1px;box-shadow:0 0 0 3px rgba(78,107,62,.16)}
+
+/* ───────── 讲台区（hero） ───────── */
+.hero{
+  position:relative;background:var(--card);border:1px solid var(--line);
+  border-radius:var(--radius);box-shadow:var(--shadow);
+  padding:24px 26px 22px;margin:22px 0 20px;overflow:hidden;
+  animation:fadeUp .4s cubic-bezier(.22,.68,.36,1) backwards;
+}
+.hero::before{content:"";position:absolute;inset:0 0 auto 0;height:3px;
+  background:var(--ink)}
+.hero h1{
+  display:inline-block;margin:0 0 9px;
+  /* 品牌名是拉丁字母 → 走 --serif（Palatino Linotype → Georgia），不能用 --kai：
+     楷体的 ASCII 字形笔画细、衬线歪，放大到 30px 会显得发飘。
+     负字距是给大字号拉丁字母收一下气，中文标题不需要这个。 */
+  font-family:var(--serif);font-weight:700;font-size:30px;line-height:1.2;
+  letter-spacing:-.012em;font-kerning:normal;
+  padding:0 3px;
+  /* 荧光笔只划整行标题（h1 里没有内层 span，不做"只划半个词"） */
+  background:linear-gradient(transparent 62%,var(--marker) 62%,var(--marker) 92%,transparent 92%);
+}
+/* 不再限 64ch：中文行宽被卡在 507px 而卡片有 982px，右侧一大块空白。
+   整页宽度已经由 .wrap 的 max-width:1080px 兜住，这里铺满即可。 */
+.hero-lead{margin:0 0 16px;color:var(--mid);font-size:13.5px;line-height:1.85}
+.hero-lead b{color:var(--ink);font-weight:700}
+/* 三条说明并排：原先竖排占掉三行高度，压成三栏后整屏能看到第一张卡 */
+.hero-guide{
+  margin:0 0 18px;padding:14px 0 0;list-style:none;
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px 24px;
+  border-top:1px solid var(--line);
+}
+.hero-guide li{position:relative;padding-left:14px;font-size:12.5px;
+  color:var(--mid);line-height:1.7}
+.hero-guide li::before{content:"";position:absolute;left:0;top:.72em;
+  width:7px;height:2px;background:var(--mid)}
+.hero-guide b{color:var(--ink);font-weight:700}
+.hero-guide code{font-size:11px}
+.hero-acts{display:flex;flex-wrap:wrap;gap:9px;align-items:center}
+@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+/* ───────── 按钮 ───────── */
+.btn{
+  min-height:42px;padding:0 15px;border-radius:8px;border:1px solid var(--line2);
+  background:var(--card);color:var(--ink);font-size:13px;font-weight:600;
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  cursor:pointer;font-family:inherit;white-space:nowrap;
+  transition:transform .14s,box-shadow .16s,background .16s,border-color .16s,color .16s;
+}
+.btn:hover{border-color:var(--dim);transform:translateY(-1px);
+  box-shadow:0 6px 16px -8px rgba(29,26,22,.5)}
+.btn:active{transform:translateY(0)}
+.btn:focus-visible{outline:2px solid var(--seal);outline-offset:2px}
+/* 主操作 = 盖上去的墨块（硬投影 0 3px 0，不是弥散阴影） */
+.btn.primary{
+  background:var(--ink);border-color:var(--ink);color:var(--paper-2);
+  box-shadow:0 3px 0 rgba(29,26,22,.22);
+}
+.btn.primary:hover{background:#000;border-color:#000;
+  box-shadow:0 5px 0 rgba(29,26,22,.22),0 14px 24px -14px rgba(29,26,22,.6)}
+.btn.ghost{color:var(--mid);border-color:transparent;background:transparent}
+.btn.ghost:hover{background:rgba(29,26,22,.055);color:var(--ink);
+  border-color:transparent;box-shadow:none;transform:none}
+.btn.danger{color:var(--bad);border-color:#E4B7AE;background:transparent}
+.btn.danger:hover{background:#FBEDE9;border-color:var(--bad);box-shadow:none}
+.btn.solid-danger{background:var(--bad);border-color:var(--bad);color:#fff}
+.btn.solid-danger:hover{background:#97302A;box-shadow:0 6px 18px -6px rgba(178,58,47,.55)}
+
+/* ───────── 编辑弹窗 ───────── */
+.mask{
+  position:fixed;inset:0;z-index:60;background:rgba(29,26,22,.44);
+  -webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);
+  display:flex;align-items:center;justify-content:center;padding:20px;
+}
+.dlg{
+  width:min(460px,100%);background:var(--card);border:1px solid var(--line);
+  border-radius:var(--radius);box-shadow:var(--shadow-lg);padding:20px 22px 18px;
+  animation:dlgIn .16s ease-out;
+}
+@keyframes dlgIn{from{transform:translateY(4px);opacity:.6}to{transform:none;opacity:1}}
+.dlg h2{margin:0 0 4px;font-family:var(--kai);font-size:19px;font-weight:700}
+.dlg .sub{margin:0 0 14px;font-size:12.5px;color:var(--mid)}
+.dlg-lab{display:block;font-size:12px;color:var(--mid);margin:0 0 6px}
+.dlg-input{
+  width:100%;min-height:44px;padding:0 12px;border-radius:8px;
+  border:1px solid var(--line2);background:var(--paper-2);color:var(--ink);
+  font-size:13.5px;font-family:inherit;
+}
+.dlg-input:focus{outline:none;border-color:var(--dim);
+  box-shadow:0 0 0 3px rgba(247,222,88,.55)}
+.dlg-err{margin:8px 0 0;font-size:12.5px;color:var(--bad);min-height:18px}
+.dlg-acts{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
+.dlg-danger{
+  margin-top:16px;padding-top:14px;border-top:1px solid var(--line);
+  display:flex;align-items:center;gap:10px;justify-content:space-between;
+}
+.dlg-danger .hint{font-size:12px;color:var(--dim);line-height:1.5;max-width:22em}
+.warn-bar{
+  background:#FBEDE9;border:1px solid #E4B7AE;color:#7E2A22;border-radius:8px;
+  padding:10px 12px;font-size:12.5px;line-height:1.65;
+}
+.toast{
+  position:fixed;left:50%;bottom:26px;z-index:80;transform:translate(-50%,10px);
+  background:var(--ink);color:var(--paper-2);font-size:12.5px;padding:10px 16px;
+  border-radius:8px;box-shadow:0 10px 30px rgba(29,26,22,.3);opacity:0;pointer-events:none;
+  transition:opacity .16s,transform .16s;
+}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+@media (prefers-reduced-motion:reduce){
+  .dlg{animation:none}
+  .toast{transition:none}
+  .hero,.pack{animation:none}
+  .btn,.pack,.pack::before{transition:none}
+}
+
+/* ───────── 列表头 ───────── */
+.list-head{display:flex;align-items:baseline;gap:10px;margin:0 0 12px;flex-wrap:wrap}
+.list-head .n{font:600 12.5px/1.4 var(--mono);color:var(--ink);
+  letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.list-head .t{font-size:12px;color:var(--dim)}
+.q{
+  margin-left:auto;min-height:38px;padding:0 12px;border-radius:8px;
+  border:1px solid var(--line2);background:var(--paper-2);font-size:13px;
+  font-family:inherit;color:var(--ink);min-width:200px;
+}
+.q::placeholder{color:var(--dim)}
+.q:focus{outline:none;border-color:var(--dim);
+  box-shadow:0 0 0 3px rgba(247,222,88,.55)}
+
+/* ───────── 卡片（书脊 + 纸片） ───────── */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px}
+.pack{
+  position:relative;overflow:hidden;
+  background:var(--card);border:1px solid var(--line);border-radius:10px;
+  padding:15px 17px 15px 21px;display:flex;gap:14px;align-items:center;
+  box-shadow:var(--shadow);
+  transition:transform .16s,box-shadow .18s,border-color .18s;
+  animation:fadeUp .28s cubic-bezier(.22,.68,.36,1) backwards;
+}
+/* 书脊：4 色按卡片顺序轮转，纯装饰，不表达任何数据 */
+.pack::before{
+  content:"";position:absolute;left:0;top:0;bottom:0;width:5px;
+  background:var(--seal);transition:width .18s;
+}
+.grid .pack:nth-child(4n+2)::before{background:var(--prussian)}
+.grid .pack:nth-child(4n+3)::before{background:var(--moss)}
+.grid .pack:nth-child(4n+4)::before{background:var(--ochre)}
+.grid .pack:nth-child(1){animation-delay:.04s}
+.grid .pack:nth-child(2){animation-delay:.08s}
+.grid .pack:nth-child(3){animation-delay:.12s}
+.grid .pack:nth-child(4){animation-delay:.16s}
+.grid .pack:nth-child(n+5){animation-delay:.2s}
+/* 搜索时 render() 会清空重建卡片、动画会重播 → 聚焦在网格里就关掉 */
+#grid:focus-within .pack{animation:none}
+.pack:hover{transform:translateY(-2px);box-shadow:var(--shadow-lg);
+  border-color:var(--line2)}
+.pack:hover::before{width:9px}
+.pack-main{min-width:0;flex:1 1 auto}
+.pack-name{font-family:var(--kai);font-size:17px;font-weight:700;letter-spacing:.01em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px}
+/* 规模行含中文（页/词），整串等宽会让中文回退发虚 → 只用 tabular-nums 把数字对齐 */
+.pack-meta{font-size:12.5px;color:var(--mid);
+  font-variant-numeric:tabular-nums;letter-spacing:.01em}
+.pack-time{font:11.5px/1.5 var(--mono);color:var(--dim);margin-top:3px;
+  letter-spacing:-.01em}
+.pack-acts{display:flex;gap:6px;flex:0 0 auto;align-items:center}
+.pack-acts .btn{min-height:38px;padding:0 12px;font-size:12.5px;font-weight:600}
+/* 卡片里第一个按钮永远是「打开播放器」（JS 里 push 的顺序固定）→ 纯 CSS 分出主次 */
+.pack-acts .btn:first-child{
+  background:var(--ink);border-color:var(--ink);color:var(--paper-2);
+  padding:0 14px;box-shadow:0 3px 0 rgba(29,26,22,.22);
+}
+.pack-acts .btn:first-child:hover{background:#000;border-color:#000;transform:none;
+  box-shadow:0 4px 0 rgba(29,26,22,.22),0 10px 18px -12px rgba(29,26,22,.6)}
+.pack-acts .btn:not(:first-child){background:transparent;border-color:transparent;
+  color:var(--mid)}
+.pack-acts .btn:not(:first-child):hover{background:rgba(29,26,22,.055);
+  color:var(--ink);border-color:transparent;box-shadow:none;transform:none}
+
+/* ───────── 空态 / 提示 ───────── */
+.empty{
+  border:1.5px dashed var(--line2);border-radius:10px;background:var(--paper-2);
+  padding:34px 20px;text-align:center;
+}
+.empty b{display:block;font-family:var(--kai);font-size:18px;margin-bottom:6px}
+.empty span{color:var(--mid);font-size:12.5px}
+.notice{
+  background:#FBF3D9;border:1px solid #E4D28C;border-left:3px solid var(--ochre);
+  color:#6B5410;
+  border-radius:8px;padding:11px 14px;font-size:13px;margin:14px 0;
+}
+.notice b{color:#543F08}
+.notice.bad{background:#FBEDE9;border-color:#E4B7AE;border-left-color:var(--seal);
+  color:#7E2A22}
+.notice.bad b{color:#6D221C}
+.pc-note{font-size:12.5px;color:var(--mid);margin:10px 0 0}
+footer.fine{
+  margin-top:30px;padding-top:16px;border-top:1px solid var(--line);
+  color:var(--dim);font-size:11.5px;line-height:1.8;
+}
+code{font:11.5px/1.5 var(--mono);background:rgba(29,26,22,.055);
+  border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:var(--mid)}
+
+/* ───────── 移动端 ───────── */
+@media (max-width:819px){
+  .wrap{padding:0 14px 44px}
+  .top-in{padding:11px 14px}
+  .hero{padding:19px 16px 17px;margin:14px 0}
+  .hero h1{font-size:24px}
+  .hero-lead{font-size:13px;line-height:1.75}
+  /* 三条说明在窄屏收回单列 */
+  .hero-guide{grid-template-columns:1fr;gap:6px;padding-top:12px}
+  /* 手机上「＋ 新建词表」不渲染（见 boot 里的 IS_PC 分支），这条说明也不该留着讲一个不存在的按钮。
+     这里只是纯文字，没有可点目标，用 CSS 收起不会产生「点了没反应」的入口。 */
+  .guide-pc{display:none}
+  .grid{grid-template-columns:1fr}
+  .pack{flex-direction:column;align-items:stretch;gap:10px;
+    border-radius:8px;padding:14px 15px 14px 19px}
+  .pack-acts{flex-direction:column;width:100%}
+  .pack-acts .btn{width:100%;min-height:44px}
+  /* 竖排时次按钮给回描边，否则一列全透明文字按钮分不清可点区域 */
+  .pack-acts .btn:not(:first-child){border-color:var(--line2);color:var(--mid)}
+  .q{margin-left:0;width:100%;min-width:0}
+  .top-right{font-size:10px}
+}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-in">
+    <div class="brand"><span class="logo">▶</span>外语词汇听读</div>
+    <!-- 右上只留版本号：以前这里连主机地址一起写，等于把「本机地址:端口」印在用户界面上 -->
+    <div class="top-right" id="ver">—</div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="hero">
+    <h1>VocabSpeaker</h1>
+    <p class="hero-lead">把一本书的词汇表变成能循环听写的词库：<b>每个词一条音频</b>，
+      按页一页页往下听，播放不用联网。下面每张卡片就是一个词库，
+      卡片上那行「页 · 词 · 时长 · 体积」是它的规模，最下面是最近更新时间。</p>
+    <ul class="hero-guide">
+      <li class="guide-pc"><b>＋ 新建词表</b>：上传 <code>docx</code> / <code>pdf</code> / <code>txt</code> 词汇表 → 在校对表里改词、
+        删掉没用的行 → 合成音频，生成一个全新的词库（合成要联网）。</li>
+      <li><b>打开播放器</b>：进入这个词库按页听写。可选单条循环 / 本页循环 / 全书顺序，
+        点任意词条重听，也能把整页 MP3 下载到本地。</li>
+      <li class="guide-pc"><b>＋ 继续加词表</b>：同一本书又扫了新的一页时用这个 ——
+        新页追加到这个词库末尾，原有页与音频保持不变。</li>
+    </ul>
+    <div class="hero-acts" id="hero-acts">
+      <a class="btn primary" id="new-btn" href="/generator?mode=new">＋ 新建词表</a>
+      <button class="btn" id="refresh" type="button">↻ 刷新列表</button>
+    </div>
+    <p class="pc-note hidden" id="pc-note">新建词表、继续加词表请在 PC 端操作；手机上可以打开播放器听写。</p>
+  </section>
+
+  <div class="notice hidden" id="notice"></div>
+
+  <div class="list-head">
+    <span class="n" id="count">—</span>
+    <span class="t" id="stamp"></span>
+    <input class="q hidden" id="q" type="search" placeholder="搜索词库名…"
+           autocomplete="off" aria-label="搜索词库名">
+  </div>
+
+  <div class="grid" id="grid"></div>
+  <div class="empty hidden" id="empty">
+    <b>还没有词库</b>
+    <span>点上面的「＋ 新建词表」，上传 docx / pdf / txt，校对后就能生成第一个词库包。</span>
+  </div>
+  <div class="notice hidden" id="nomatch"></div>
+
+</main>
+
+<!-- 编辑弹窗：改名与删除共用一张白卡，两个视图切换（不叠第二层遮罩） -->
+<div class="mask hidden" id="ed-mask">
+  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="ed-title">
+    <h2 id="ed-title">编辑词库</h2>
+    <p class="sub" id="ed-sub">—</p>
+
+    <div id="ed-edit">
+      <label class="dlg-lab" for="ed-name">词库名称</label>
+      <input class="dlg-input" id="ed-name" type="text" maxlength="80"
+             spellcheck="false" autocomplete="off">
+      <p class="dlg-err" id="ed-err"></p>
+      <div class="dlg-acts">
+        <button class="btn" type="button" id="ed-cancel">取消</button>
+        <button class="btn primary" type="button" id="ed-save">保存名称</button>
+      </div>
+      <div class="dlg-danger">
+        <span class="hint">连同它的音频文件一起移除这个词库。</span>
+        <button class="btn danger" type="button" id="ed-del">删除此词库</button>
+      </div>
+    </div>
+
+    <div id="ed-confirm" class="hidden">
+      <div class="warn-bar" id="ed-warn">删除后无法恢复。</div>
+      <div class="dlg-acts">
+        <button class="btn" type="button" id="ed-c-cancel">取消</button>
+        <button class="btn solid-danger" type="button" id="ed-c-ok">确定删除</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+var VERSION = 'v2.3.2';             // v2.3.2：主页标题改为 VocabSpeaker
+var IS_FILE = location.protocol === 'file:';
+var MQ = window.matchMedia('(min-width:820px)');
+var IS_PC = MQ.matches;
+
+/* 写接口要 X-Token，由 serve.py 现读现注入；file:// 或另存下来的页面拿不到 → 不渲染编辑入口。
+   ⚠️ 这里只能比前缀 '__PET'：serve.py 是**全文替换**占位符，写成完整占位符会被一并替换掉，
+   于是 `TOKEN.indexOf('<真token>') === 0` 恒成立 → 什么都判成"没有 token"（踩过一次）。 */
+var TOKEN = '__PET_TOKEN__';
+function hasToken(){ return TOKEN.indexOf('__PET') !== 0; }
+
+var $ = function(s){ return document.querySelector(s); };
+var S = { packs: [], loaded: false, editing: null, busy: false };
+
+function fmtSec(s){
+  s = Math.round(Number(s) || 0);
+  var m = Math.floor(s / 60), r = s % 60;
+  return m + ':' + (r < 10 ? '0' : '') + r;
+}
+function fmtBytes(b){
+  b = Number(b) || 0;
+  if (b >= 1048576) return (b / 1048576).toFixed(1) + ' MB';
+  if (b >= 1024) return Math.round(b / 1024) + ' KB';
+  return b + ' B';
+}
+function pad2(n){ return n < 10 ? '0' + n : '' + n; }
+function fmtTime(ms){
+  if (!ms) return '—';
+  var d = new Date(ms * 1000);
+  return pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + ' ' +
+         pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+}
+
+function el(tag, cls, text){
+  var e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+function A(href, text, cls){
+  var a = el('a', cls, text);
+  a.href = href;
+  return a;
+}
+
+/* 卡片：名称 / 规模 / 更新时间 + 动作（PC 才有「继续加词表」与「✎ 编辑」） */
+function card(p){
+  var box = el('article', 'pack');
+  var main = el('div', 'pack-main');
+  main.appendChild(el('div', 'pack-name', p.name));
+  main.appendChild(el('div', 'pack-meta',
+    p.pages + ' 页 · ' + p.words + ' 词 · ' + fmtSec(p.sec) + ' · ' + fmtBytes(p.bytes)));
+  main.appendChild(el('div', 'pack-time', '更新于 ' + fmtTime(p.mtime)));
+  box.appendChild(main);
+
+  var acts = el('div', 'pack-acts');
+  acts.appendChild(A(p.url, '打开播放器', 'btn'));
+  /* slot: download-zip（预留位置；不要在此渲染任何可见元素，接入方式见方案 §8.4） */
+  if (IS_PC) {
+    acts.appendChild(A('/generator?pack=' + encodeURIComponent(p.id),
+                       '＋ 继续加词表', 'btn ghost'));
+    if (hasToken()) {
+      var ed = el('button', 'btn ghost', '✎ 编辑');
+      ed.type = 'button';
+      ed.setAttribute('data-edit', p.id);
+      ed.addEventListener('click', function(){ openEdit(p); });
+      acts.appendChild(ed);
+    }
+  }
+  box.appendChild(acts);
+  return box;
+}
+
+function render(){
+  var grid = $('#grid');
+  grid.textContent = '';
+  var kw = ($('#q').value || '').trim().toLowerCase();
+  var list = S.packs.filter(function(p){
+    return !kw || p.name.toLowerCase().indexOf(kw) >= 0;
+  });
+
+  $('#count').textContent = S.packs.length
+    ? S.packs.length + ' 个词库' + (kw ? '（匹配 ' + list.length + '）' : '')
+    : '0 个词库';
+
+  var nm = $('#nomatch');
+  if (kw && !list.length) {
+    nm.className = 'notice';
+    nm.textContent = '没有匹配「' + kw + '」的词库。';
+  } else {
+    nm.className = 'notice hidden';
+    nm.textContent = '';
+  }
+
+  var empty = $('#empty');
+  if (!S.packs.length) {
+    empty.classList.remove('hidden');
+  } else {
+    empty.classList.add('hidden');
+  }
+
+  list.forEach(function(p){ grid.appendChild(card(p)); });
+}
+
+function setNotice(html, bad){
+  var n = $('#notice');
+  if (!html) { n.className = 'notice hidden'; n.innerHTML = ''; return; }
+  n.className = 'notice' + (bad ? ' bad' : '');
+  n.innerHTML = html;
+}
+
+function load(){
+  if (IS_FILE) return;
+  return fetch('/api/packs', {cache: 'no-store'}).then(function(r){
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }).then(function(d){
+    S.packs = d.packs || [];
+    S.loaded = true;
+    setNotice('');
+    $('#stamp').textContent = '· 刚刚刷新';
+    $('#q').classList.toggle('hidden', S.packs.length < 8);
+    render();
+  }).catch(function(e){
+    $('#stamp').textContent = '';
+    setNotice('<b>读不到词库列表：' + (e.message || '请求失败') +
+              '</b><br>服务还在跑吗？用 <code>start_pet.bat</code> 重新启动。', true);
+    if (!S.loaded) { $('#count').textContent = '—'; }
+  });
+}
+
+/* ───────────── 编辑弹窗（改名 / 删除） ───────────── */
+var _toastT = null;
+function flash(msg){
+  var t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(_toastT);
+  _toastT = setTimeout(function(){ t.classList.remove('show'); }, 2400);
+}
+
+function postJson(path, obj){
+  return fetch(path, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-Token': TOKEN},
+    body: JSON.stringify(obj)
+  }).then(function(r){
+    return r.text().then(function(txt){
+      var d = {};
+      try { d = JSON.parse(txt); } catch (e) { d = {error: txt.slice(0, 200)}; }
+      if (!r.ok) {
+        var err = new Error(d.error || ('HTTP ' + r.status));
+        err.status = r.status;
+        throw err;
+      }
+      return d;
+    });
+  });
+}
+
+function setEdBusy(on){
+  S.busy = !!on;
+  ['#ed-save', '#ed-cancel', '#ed-del', '#ed-c-ok', '#ed-c-cancel'].forEach(function(s){
+    var e = $(s); if (e) e.disabled = !!on;
+  });
+}
+
+function showEditView(view){
+  var conf = view === 'confirm';
+  var p = S.editing || {name: '', pages: 0, words: 0};
+  $('#ed-edit').classList.toggle('hidden', conf);
+  $('#ed-confirm').classList.toggle('hidden', !conf);
+  if (conf) {
+    $('#ed-title').textContent = '删除后无法恢复';
+    $('#ed-sub').textContent = '「' + p.name + '」' +
+      p.pages + ' 页 / ' + p.words + ' 词';
+    $('#ed-warn').textContent = '删除后无法恢复：这个词库的音频文件会一起移除，' +
+      '之后在界面里再也找不回来。';
+    setTimeout(function(){ var b = $('#ed-c-cancel'); if (b) b.focus(); }, 30);
+  } else {
+    $('#ed-title').textContent = '编辑词库';
+    $('#ed-sub').textContent = p.pages + ' 页 · ' + p.words + ' 词 · 更新于 ' +
+      fmtTime(p.mtime);
+    var inp = $('#ed-name');
+    inp.value = p.name || '';
+    $('#ed-err').textContent = '';
+    setTimeout(function(){ if (inp) { inp.focus(); inp.select(); } }, 30);
+  }
+}
+
+function openEdit(p){
+  if (!p || !hasToken()) return;
+  S.editing = p;
+  setEdBusy(false);
+  showEditView('edit');
+  $('#ed-mask').classList.remove('hidden');
+}
+
+function closeEdit(){
+  $('#ed-mask').classList.add('hidden');
+  S.editing = null;
+  setEdBusy(false);
+}
+
+function checkName(name){
+  if (!name) return '请填写词库名';
+  if (/[\\/:*?"<>|]/.test(name)) return '名称不能包含 \\ / : * ? " < > |';
+  if (name.charAt(0) === '_') return '名称不能以下划线 _ 开头';
+  if (/\.$/.test(name)) return '名称不能以「.」结尾';
+  if (name.length > 80) return '名称最多 80 个字';
+  if (S.editing && name === S.editing.name) return '名称没有变化';
+  return '';
+}
+
+function doRename(){
+  var p = S.editing;
+  if (!p || S.busy) return;
+  var name = ($('#ed-name').value || '').trim();
+  var bad = checkName(name);
+  if (bad) { $('#ed-err').textContent = bad; return; }
+  $('#ed-err').textContent = '保存中…';
+  setEdBusy(true);
+  postJson('/api/pack/rename', {id: p.id, name: name}).then(function(){
+    closeEdit();
+    flash('已改名为「' + name + '」');
+    return load();
+  }).catch(function(e){
+    // 错误留在用户正在看的地方；服务端原文照抄，不猜原因
+    $('#ed-err').textContent = e.message;
+  }).finally(function(){
+    setEdBusy(false);
+  });
+}
+
+function doDelete(){
+  var p = S.editing;
+  if (!p || S.busy) return;
+  setEdBusy(true);
+  postJson('/api/pack/delete', {id: p.id}).then(function(){
+    closeEdit();
+    flash('已删除「' + p.name + '」');
+    return load();
+  }).catch(function(e){
+    showEditView('edit');
+    $('#ed-err').textContent = e.message;
+  }).finally(function(){
+    setEdBusy(false);
+  });
+}
+
+function wireEdit(){
+  $('#ed-cancel').addEventListener('click', closeEdit);
+  $('#ed-c-cancel').addEventListener('click', function(){ showEditView('edit'); });
+  $('#ed-save').addEventListener('click', doRename);
+  $('#ed-del').addEventListener('click', function(){ showEditView('confirm'); });
+  $('#ed-c-ok').addEventListener('click', doDelete);
+  $('#ed-name').addEventListener('keydown', function(e){
+    if (e.key === 'Enter') { e.preventDefault(); doRename(); }
+  });
+  // 点遮罩空白关闭；点白卡内部不算
+  $('#ed-mask').addEventListener('mousedown', function(e){
+    if (e.target === $('#ed-mask')) closeEdit();
+  });
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape' && !$('#ed-mask').classList.contains('hidden')) closeEdit();
+  });
+}
+
+function boot(){
+  $('#ver').textContent = VERSION;        // 只报版本，不报 host（排查时看这一行就够了）
+
+  if (IS_FILE) {
+    // 双击本地文件打开：这里没有服务端，任何按钮都是假的 → 一个都不给
+    $('#hero-acts').classList.add('hidden');
+    $('#grid').classList.add('hidden');
+    $('#empty').classList.add('hidden');
+    $('#count').textContent = '—';
+    setNotice('<b>这是直接打开的本地文件，看不到词库列表。</b><br>' +
+      '工作台由本机服务提供：运行 <code>start_pet.bat</code> 后打开 ' +
+      '<code>http://127.0.0.1:8901/</code>。已经生成的词库包仍然可以双击 ' +
+      '<code>index.html</code> 直接播放。', false);
+    return;
+  }
+
+  if (!IS_PC) {
+    // 手机上不渲染生成入口（而不是用 CSS 藏起来）：点进去只会撞「请在 PC 端使用」
+    var nb = $('#new-btn');
+    if (nb) nb.parentNode.removeChild(nb);
+    $('#pc-note').classList.remove('hidden');
+  }
+
+  $('#refresh').addEventListener('click', function(){
+    $('#stamp').textContent = '· 刷新中…';
+    load();
+  });
+  $('#q').addEventListener('input', render);
+  wireEdit();
+
+  // 从生成器切回来时数字应该是新的（本机工具，不做后台轮询）
+  document.addEventListener('visibilitychange', function(){
+    if (!document.hidden) load();
+  });
+
+  // 阈值变了就重排（动作按钮的数量跟着 IS_PC 变，不能只靠 CSS 藏）
+  var onMQ = function(){
+    IS_PC = MQ.matches;
+    if (IS_PC) {
+      if (!$('#new-btn') && $('#hero-acts')) {
+        var a = A('/generator?mode=new', '＋ 新建词表', 'btn primary');
+        a.id = 'new-btn';
+        $('#hero-acts').insertBefore(a, $('#refresh'));
+      }
+      $('#pc-note').classList.add('hidden');
+    } else {
+      var nb2 = $('#new-btn');
+      if (nb2) nb2.parentNode.removeChild(nb2);
+      $('#pc-note').classList.remove('hidden');
+    }
+    render();
+  };
+  if (MQ.addEventListener) MQ.addEventListener('change', onMQ);
+  else if (MQ.addListener) MQ.addListener(onMQ);
+
+  load();
+}
+
+boot();
+</script>
+</body>
+</html>

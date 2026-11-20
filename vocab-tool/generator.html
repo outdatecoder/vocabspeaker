@@ -1,0 +1,1831 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>添加词表 · 外语词汇听读</title>
+<style>
+  /* 词汇讲义：与工作台 home.html / 词库包同一套令牌（纸 · 墨 · 荧光笔 · 印章）。
+     离线单文件、不引外部资源；字体只用系统自带的楷体/衬线/等宽。 */
+  :root{
+    --paper:#F6F2E7; --paper-2:#FFFCF3; --card:#FFFDF6;
+    --ink:#1D1A16; --mid:#4A443A; --muted:#8A8172;
+    --line:#DED5C0; --line-2:#CBBFA3;
+    --brand:#1D1A16;                       /* 历史上 --brand 当"填充色"用，仍指墨 */
+    --brand2:#1D1A16;
+    --brand-soft:rgba(247,222,88,.34);     /* 选中 = 荧光笔浅黄，不再是靛蓝 */
+    --marker:#F7DE58; --seal:#B23A2F; --moss:#4E6B3E;
+    --prussian:#2C4A5E; --ochre:#8A6A2F;
+    --live:#4E6B3E; --warn:#8A6A2F; --bad:#B23A2F;
+    --shadow:0 1px 0 rgba(29,26,22,.05),0 10px 26px -14px rgba(29,26,22,.35);
+    --shadow-lg:0 2px 0 rgba(29,26,22,.06),0 22px 44px -20px rgba(29,26,22,.45);
+    --grad:var(--ink);                     /* 旧渐变统一退化为墨色实心 */
+    --kai:"KaiTi","STKaiti","Kaiti SC","Palatino Linotype",Palatino,Georgia,serif;
+    --sans:"Microsoft YaHei","PingFang SC","Hiragino Sans GB",sans-serif;
+    --mono:ui-monospace,Consolas,"Courier New",monospace;
+    --r:10px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0}
+  body{
+    /* 纸：极淡 32px 横格线，用 background 而非覆盖层伪元素 */
+    background-color:var(--paper);
+    background-image:repeating-linear-gradient(to bottom,
+      transparent 0 31px, rgba(29,26,22,.045) 31px 32px);
+    color:var(--ink);
+    font-family:var(--sans);
+    font-size:13.5px;line-height:1.55;overflow-x:hidden;
+  }
+  .wrap{max-width:880px;margin:0 auto;padding:0 16px 48px}
+  .hidden{display:none !important}
+
+  /* ───────── 顶栏 ───────── */
+  .topbar{position:sticky;top:0;z-index:20;background:rgba(246,242,231,.88);
+    backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+  .topbar-in{max-width:880px;margin:0 auto;padding:10px 16px;display:flex;
+    align-items:center;gap:12px;flex-wrap:wrap}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:17px;
+    font-family:var(--kai);letter-spacing:.01em}
+  .brand .logo{width:30px;height:30px;border-radius:6px;background:var(--ink);
+    display:grid;place-items:center;color:var(--paper-2);font-size:15px;flex:0 0 auto;
+    box-shadow:0 2px 0 rgba(29,26,22,.25)}
+  .tagline{color:var(--muted);font-size:12.5px;margin-left:auto;
+    display:flex;align-items:center;gap:8px}
+  .tagline b{color:var(--mid);font-weight:600;font-family:var(--mono)}
+  .back{display:inline-flex;align-items:center;gap:5px;min-height:36px;padding:0 12px;
+    border:1px solid var(--line-2);border-radius:8px;background:var(--card);color:var(--mid);
+    text-decoration:none;font-size:13px;font-weight:600;transition:.14s}
+  .back:hover{border-color:var(--muted);color:var(--ink);
+    box-shadow:0 6px 16px -10px rgba(29,26,22,.6)}
+  .back:focus-visible{outline:2px solid var(--seal);outline-offset:2px}
+
+  /* ───────── 步骤条（页面骨架：当前步骤是墨块，已完成为苔绿序号） ───────── */
+  .steps{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:18px 0 16px}
+  .step{position:relative;background:var(--card);border:1px solid var(--line);
+    border-radius:8px;padding:9px 10px;display:flex;align-items:center;gap:8px;
+    font-size:12.5px;color:var(--muted);transition:.18s;overflow:hidden}
+  .step .no{width:20px;height:20px;border-radius:50%;flex:0 0 auto;display:grid;
+    place-items:center;font:700 11px/1 var(--mono);background:rgba(29,26,22,.07);
+    color:var(--muted);transition:.18s}
+  .step.done{color:var(--ink);border-color:var(--line-2)}
+  .step.done .no{background:var(--moss);color:var(--paper-2)}
+  .step.active{color:var(--paper-2);font-weight:700;border-color:var(--ink);
+    background:var(--ink);box-shadow:0 3px 0 rgba(29,26,22,.22)}
+  .step.active .no{background:rgba(255,253,246,.24);color:var(--paper-2)}
+
+  /* ───────── 卡片 ───────── */
+  .sec{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
+    box-shadow:var(--shadow);margin-bottom:14px;overflow:hidden;
+    animation:rise .26s ease}
+  @keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .sec-head{display:flex;align-items:center;gap:10px;padding:14px 16px 0}
+  .sec-title{font-family:var(--kai);font-size:16px;font-weight:700;letter-spacing:.01em}
+  .sec-sub{color:var(--muted);font-size:12.5px;font-weight:400}
+  .sec-body{padding:14px 16px 16px}
+
+  /* ───────── 上传（纸色虚线框） ───────── */
+  .drop{border:1.5px dashed var(--line-2);border-radius:10px;
+    background:var(--paper-2);padding:26px 18px;text-align:center;
+    cursor:pointer;transition:.18s;outline-offset:2px}
+  .drop:hover,.drop.over{border-style:solid;border-color:var(--ink);
+    background:rgba(247,222,88,.18);box-shadow:inset 0 0 0 3px rgba(247,222,88,.28)}
+  .drop:focus-visible{outline:2px solid var(--seal)}
+  .drop .ico{display:flex;justify-content:center;margin-bottom:9px}
+  .drop .ico svg{width:26px;height:26px;color:var(--mid)}
+  .drop .t1{font-weight:700;font-size:14px}
+  .drop .t2{color:var(--muted);font-size:12.5px;margin-top:3px}
+  .pick{margin-top:12px;min-height:44px;padding:0 20px;border-radius:8px;
+    border:1px solid var(--ink);background:var(--ink);color:var(--paper-2);
+    font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;
+    box-shadow:0 3px 0 rgba(29,26,22,.22);transition:.14s}
+  .pick:hover{transform:translateY(-1px);background:#000;
+    box-shadow:0 4px 0 rgba(29,26,22,.22),0 12px 22px -12px rgba(29,26,22,.6)}
+  .pick:active{transform:none}
+  .pick:focus-visible{outline:2px solid var(--seal);outline-offset:3px}
+  .fmt{display:inline-block;background:rgba(29,26,22,.06);border:1px solid var(--line);
+    color:var(--mid);font:700 11.5px/1.6 var(--mono);padding:2px 9px;border-radius:999px;
+    margin:0 4px}
+  .fine{color:var(--muted);font-size:12.5px;margin:12px 0 0;line-height:1.75}
+  .opt{display:flex;align-items:flex-start;gap:9px;margin-top:12px;padding:11px 12px;
+    border:1px solid var(--line);border-radius:8px;background:var(--paper-2);font-size:12.5px}
+  .opt input{margin:2px 0 0;width:16px;height:16px;accent-color:var(--seal);flex:0 0 auto}
+  .opt .o1{font-weight:600}
+  .opt .o2{color:var(--muted);margin-top:2px}
+
+  /* ───────── 进度 ───────── */
+  .prog-head{display:flex;align-items:center;gap:10px}
+  /* 进度文案可长（"共 2182 词…"），必须允许它收缩，否则会把右侧的时间挤出去 */
+  .prog-head #prog-msg{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* 预计完成时间：等宽数字，免得 10:42 → 11:05 时宽度一跳一跳 */
+  #prog-eta{margin-left:auto;font-size:12px;color:var(--muted);white-space:nowrap;
+    font-family:var(--mono);letter-spacing:.02em}
+  #prog-pct{font-size:13px;flex:0 0 auto}
+  .phase{font-size:12.5px;color:var(--muted);margin-left:auto;font-family:var(--mono)}
+  .bar{height:9px;border-radius:999px;background:var(--line);overflow:hidden;margin:12px 0 4px}
+  .bar i{display:block;height:100%;width:0;border-radius:999px;background:var(--ink);
+    transition:width .45s cubic-bezier(.4,0,.2,1)}
+  .bar i.indet{width:38%;animation:slide 1.25s ease-in-out infinite}
+  @keyframes slide{0%{transform:translateX(-100%)}100%{transform:translateX(280%)}}
+  /* 等宽日志需要深底才读得清 → 暖墨，不用纸色 */
+  .log{background:#221F1A;color:#DCD3BE;border-radius:8px;padding:11px 12px;height:180px;
+    overflow:auto;font:12px/1.7 var(--mono);
+    white-space:pre-wrap;word-break:break-all;margin-top:10px}
+  .log::-webkit-scrollbar{width:8px}
+  .log::-webkit-scrollbar-thumb{background:#4A443A;border-radius:4px}
+  .btn{font-family:inherit;font-size:13.5px;font-weight:600;cursor:pointer;
+    border:1px solid var(--line-2);background:var(--card);color:var(--ink);border-radius:8px;
+    min-height:44px;padding:0 16px;display:inline-flex;align-items:center;
+    justify-content:center;gap:6px;transition:.14s}
+  .btn:hover{border-color:var(--muted);background:var(--paper-2);
+    transform:translateY(-1px);box-shadow:0 6px 16px -10px rgba(29,26,22,.6)}
+  .btn:focus-visible{outline:2px solid var(--seal);outline-offset:2px}
+  .btn[disabled]{opacity:.5;cursor:not-allowed}
+  .btn.primary{background:var(--ink);color:var(--paper-2);border-color:var(--ink);
+    box-shadow:0 3px 0 rgba(29,26,22,.22)}
+  .btn.primary:hover{background:#000;border-color:#000;
+    box-shadow:0 4px 0 rgba(29,26,22,.22),0 12px 22px -12px rgba(29,26,22,.6)}
+  .btn.ghost{background:transparent}
+  .btn.danger{color:var(--bad);border-color:#E4B7AE;background:transparent}
+  .btn.danger:hover{background:#FBEDE9;border-color:var(--bad);box-shadow:none}
+  .row-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+
+  /* ───────── 校对 ───────── */
+  .rv-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:0 16px 12px}
+  .chip{font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;
+    min-height:36px;padding:0 12px;border-radius:999px;border:1px solid var(--line);
+    background:var(--card);color:var(--muted);transition:.14s}
+  .chip:hover{border-color:var(--muted);color:var(--ink)}
+  .chip.on{background:var(--brand-soft);border-color:rgba(178,58,47,.28);color:var(--seal)}
+  .chip:focus-visible{outline:2px solid var(--seal);outline-offset:2px}
+  /* 「全选 / 全不选」与筛选按钮不是一类东西，用一道竖线隔开 */
+  .pick-tools{display:inline-flex;gap:6px;padding-left:10px;border-left:1px solid var(--line-2)}
+  .sum{margin-left:auto;color:var(--muted);font-size:12.5px;font-variant-numeric:tabular-nums}
+  .sum b{color:var(--ink)}
+  .groups{display:flex;flex-direction:column;gap:8px}
+  /* 组 = 「勾选格」+「折叠头」+「整行的表体」。
+     勾选格刻意放在 button **外面** —— checkbox 嵌进 <button> 里点不动
+     （HTML 不允许交互元素嵌套），这里用 grid 把它排到左边。 */
+  .g{display:grid;grid-template-columns:42px 1fr;border:1px solid var(--line);
+    border-radius:8px;overflow:hidden;background:var(--card);transition:.14s}
+  .g-pick{display:grid;place-items:center;border-right:1px solid var(--line);
+    background:var(--paper-2);cursor:pointer;transition:.14s}
+  .g-pick:hover{background:rgba(29,26,22,.05)}
+  .g-pick input{width:18px;height:18px;margin:0;accent-color:#1D1A16;cursor:pointer}
+  .g-pick input:focus-visible{outline:2px solid var(--seal);outline-offset:2px}
+  /* 没勾选 = 这一页不会提交：压暗，但一眼还能看清是哪一页 */
+  .g.off{border-color:var(--line-2)}
+  .g.off .g-pick{background:#F1ECE0}
+  .g.off .g-head{opacity:.45}
+  .g.off .g-body{opacity:.55}
+  .g-head{display:flex;align-items:center;gap:10px;width:100%;min-height:46px;padding:9px 12px;
+    border:none;background:var(--paper-2);font-family:inherit;font-size:13px;color:var(--ink);
+    cursor:pointer;text-align:left;transition:.14s}
+  .g-head:hover{background:rgba(29,26,22,.04)}
+  .g-head:focus-visible{outline:2px solid var(--seal);outline-offset:-2px}
+  .g-no{font-weight:700;flex:0 0 auto;font-family:var(--mono)}
+  .g-words{color:var(--muted);font-size:12.5px;flex:0 0 auto;font-variant-numeric:tabular-nums}
+  .g-span{color:var(--muted);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;
+    white-space:nowrap;flex:1 1 auto}
+  .g-badge{font-size:11.5px;font-weight:700;border-radius:999px;padding:1px 8px;
+    background:rgba(138,106,47,.14);color:var(--ochre);flex:0 0 auto}
+  .g-badge.mut{background:rgba(44,74,94,.12);color:var(--prussian)}
+  .g-chev{color:var(--muted);font-size:11px;transition:transform .18s;flex:0 0 auto}
+  .g.open .g-chev{transform:rotate(180deg)}
+  .g-body{display:none;grid-column:1 / -1;border-top:1px solid var(--line)}
+  .g.open .g-body{display:block}
+  table.t{width:100%;border-collapse:collapse;table-layout:fixed}
+  table.t th{font-size:11.5px;font-weight:700;color:var(--muted);text-align:left;
+    padding:7px 8px;background:var(--paper-2);border-bottom:1px solid var(--line);
+    position:sticky;top:0;z-index:1}
+  table.t th.c-i{width:44px}
+  table.t th.c-w{width:48px}
+  table.t th.c-x{width:52px}
+  td{padding:3px 6px;border-bottom:1px solid var(--line);vertical-align:middle}
+  tr:last-child td{border-bottom:none}
+  td.i{color:var(--muted);font-size:11.5px;text-align:right;
+    font-variant-numeric:tabular-nums;font-family:var(--mono)}
+  .cell{width:100%;min-height:36px;border:1px solid transparent;border-radius:6px;
+    padding:6px 8px;font-family:inherit;font-size:13px;color:var(--ink);
+    background:transparent;transition:.12s}
+  .cell:hover{background:rgba(29,26,22,.035)}
+  .cell:focus{outline:none;background:var(--paper-2);border-color:var(--muted);
+    box-shadow:0 0 0 3px rgba(247,222,88,.55)}
+  /* 已改 = 荧光笔边；可疑 = 印章红边 */
+  tr.dirty .cell{border-color:rgba(247,222,88,.95);background:rgba(247,222,88,.12)}
+  tr.susp .cell{border-color:#E4B7AE}
+  .del{width:44px;height:44px;border-radius:6px;border:1px solid transparent;
+    background:transparent;color:var(--line-2);cursor:pointer;font-size:15px;line-height:1;
+    transition:.12s}
+  .del:hover{color:var(--bad);background:#FBEDE9;border-color:#E4B7AE}
+  .del:focus-visible{outline:2px solid var(--seal);outline-offset:1px}
+  .empty{color:var(--muted);font-size:12.5px;padding:14px;text-align:center}
+
+  /* ── 「可疑」的理由与建议 ── */
+  .why-btn{width:40px;height:36px;border-radius:6px;border:1px dashed #E4B7AE;
+    background:#FBEDE9;color:var(--seal);cursor:pointer;font-family:inherit;font-size:13px;
+    font-weight:800;line-height:1;transition:.12s}
+  .why-btn:hover{background:#F5DAD4;border-style:solid}
+  .why-btn[aria-expanded=true]{background:var(--seal);border-color:var(--seal);
+    border-style:solid;color:var(--paper-2)}
+  .why-btn:focus-visible{outline:2px solid var(--seal);outline-offset:1px}
+  tr.why-row td{padding:0;border-bottom:1px solid var(--line)}
+  .why{background:#FBF3D9;border-left:3px solid var(--ochre);padding:11px 14px;
+    font-size:12.5px;animation:rise .18s ease}
+  .why ul{margin:6px 0 0;padding-left:17px}
+  .why li{margin:6px 0;line-height:1.7}
+  .why li b{color:#543F08;display:block}
+  .why li span{color:var(--mid);display:block;margin-top:1px}
+  .why-t{font-weight:700;color:#543F08}
+  .why-foot{margin-top:9px;padding-top:8px;border-top:1px dashed #E4D28C;
+    color:var(--mid);font-size:12px;line-height:1.7}
+  details.rules{margin:0 0 10px;font-size:12.5px;color:var(--muted);
+    background:var(--paper-2);border:1px solid var(--line);border-radius:8px;padding:0 12px}
+  details.rules summary{cursor:pointer;font-weight:600;color:var(--ink);padding:9px 0;
+    list-style:none}
+  details.rules summary::-webkit-details-marker{display:none}
+  details.rules summary::before{content:'▸ ';color:var(--seal);font-weight:800}
+  details.rules[open] summary::before{content:'▾ '}
+  details.rules[open]{padding-bottom:11px}
+  details.rules ul{margin:0;padding-left:18px;line-height:1.85}
+  details.rules code{background:rgba(44,74,94,.1);color:var(--prussian);
+    border-radius:4px;padding:0 4px;font:11.5px/1.6 var(--mono)}
+  .g-badge.click{cursor:pointer}
+  .g-badge.click:hover{filter:brightness(.96);text-decoration:underline}
+  .hintbar{font-size:12.5px;background:#FBF3D9;border:1px solid #E4D28C;
+    border-left:3px solid var(--ochre);color:#6B5410;border-radius:8px;
+    padding:9px 12px;margin:0 0 10px}
+
+  /* ───────── 目标 ───────── */
+  .radios{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+  .radio{border:1px solid var(--line);border-radius:8px;padding:11px 12px;cursor:pointer;
+    display:flex;gap:9px;align-items:flex-start;transition:.14s;background:var(--paper-2)}
+  .radio:hover{border-color:var(--muted)}
+  .radio.on{border-color:rgba(178,58,47,.35);background:var(--brand-soft);
+    box-shadow:inset 0 0 0 1px rgba(178,58,47,.18)}
+  .radio input{margin:2px 0 0;width:16px;height:16px;accent-color:var(--seal);flex:0 0 auto}
+  .radio .r1{font-weight:700;font-size:13px}
+  .radio .r2{color:var(--muted);font-size:12px;margin-top:2px}
+  .field{margin-top:10px}
+  .field label{display:block;font-size:12.5px;font-weight:600;margin-bottom:5px}
+  .input,select.input{width:100%;min-height:44px;border:1px solid var(--line-2);
+    border-radius:8px;padding:0 12px;font-family:inherit;font-size:13.5px;
+    background:var(--paper-2);color:var(--ink)}
+  .input:focus,select.input:focus{outline:none;border-color:var(--muted);
+    box-shadow:0 0 0 3px rgba(247,222,88,.55)}
+  .err{color:var(--bad);font-size:12.5px;margin-top:6px;min-height:0}
+  .ok{color:var(--moss);font-size:12.5px;margin-top:6px}
+  /* 提醒（赭金纸签）/ 拦截（印章红）：都只在真有问题时出现，不常驻 */
+  .warn{margin-top:8px;padding:9px 11px;border-radius:4px;font-size:12.5px;line-height:1.65;
+    background:#FBF3D9;border:1px solid #E4D28C;border-left:3px solid #C89B3C;color:#6B5A22}
+  .err{margin-top:8px;padding:9px 11px;border-radius:4px;font-size:12.5px;line-height:1.65;
+    background:#FBEDE9;border:1px solid #E7C3B9;border-left:3px solid var(--seal);color:#8A2E24}
+
+  /* ───────── 完成 ───────── */
+  .done-hero{display:flex;align-items:center;gap:12px;padding:16px}
+  .done-hero .tick{width:42px;height:42px;border-radius:8px;background:var(--moss);
+    color:var(--paper-2);display:grid;place-items:center;font-size:20px;flex:0 0 auto;
+    box-shadow:0 3px 0 rgba(29,26,22,.18)}
+  .done-hero .d1{font-size:15px;font-weight:700}
+  .done-hero .d2{color:var(--muted);font-size:12.5px;margin-top:2px}
+  .kv{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:0 16px 16px}
+  .kv div{background:var(--paper-2);border:1px solid var(--line);border-radius:8px;
+    padding:10px;text-align:center}
+  .kv b{display:block;font:700 17px/1.2 var(--mono);letter-spacing:-.02em;
+    font-variant-numeric:tabular-nums}
+  .kv span{color:var(--muted);font-size:11.5px;letter-spacing:.04em}
+
+  /* ───────── 提示 ───────── */
+  .notice{background:#FBF3D9;border:1px solid #E4D28C;border-left:3px solid var(--ochre);
+    color:#6B5410;border-radius:8px;padding:11px 14px;font-size:13px;margin:14px 0}
+  .notice b{color:#543F08}
+  .notice.bad{background:#FBEDE9;border-color:#E4B7AE;border-left-color:var(--seal);
+    color:#7E2A22}
+  .notice.bad b{color:#6D221C}
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(12px);
+    background:var(--ink);color:var(--paper-2);border-radius:8px;padding:10px 16px;
+    font-size:13px;box-shadow:0 10px 30px rgba(29,26,22,.3);
+    opacity:0;pointer-events:none;transition:.22s;z-index:60;max-width:min(560px,90vw)}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  /* ───────── 移动端闸门 ───────── */
+  #mobile-gate{display:none}
+  @media (max-width:819px){
+    #app{display:none}
+    #mobile-gate{display:block;background:var(--card);border:1px solid var(--line);
+      border-radius:var(--r);box-shadow:var(--shadow);margin:20px 0;padding:28px 18px;
+      text-align:center}
+    #mobile-gate .g1{font-size:15px;font-weight:700}
+    #mobile-gate .g2{color:var(--muted);font-size:13px;margin-top:8px;line-height:1.8}
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-in">
+    <a class="back" id="back-link" href="/">← 词库列表</a>
+    <div class="brand"><span class="logo">＋</span>添加词表</div>
+    <!-- 右上只留版本号：以前这里连主机地址一起写，等于把「本机地址:端口」印在用户界面上 -->
+    <span class="tagline"><b id="ver">—</b></span>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- 移动端：只给一句话，不渲染上传与校对控件 -->
+  <div id="mobile-gate">
+    <div class="g1">请在 PC 端使用</div>
+    <div class="g2">上传与校对需要键盘和大屏。生成好的词库包可以在手机上打开收听。</div>
+  </div>
+
+  <div id="app">
+    <div class="steps" id="steps">
+      <div class="step" data-step="1"><span class="no">1</span>选择文件</div>
+      <div class="step" data-step="2"><span class="no">2</span>扫描与解析</div>
+      <div class="step" data-step="3"><span class="no">3</span>校对词表</div>
+      <div class="step" data-step="4"><span class="no">4</span>生成</div>
+    </div>
+
+    <div id="boot-notice" class="notice hidden"></div>
+
+    <!-- ── 1 上传 ── -->
+    <section class="sec" id="sec-upload">
+      <div class="sec-head">
+        <div class="sec-title">选择词表文件</div>
+        <div class="sec-sub">docx / pdf / txt</div>
+      </div>
+      <div class="sec-body">
+        <div class="drop" id="dropzone" tabindex="0" role="button"
+             aria-label="选择或拖入词表文件">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h5"/></svg></div>
+          <div class="t1">把文件拖到这里，或点下面按钮选择</div>
+          <div class="t2">支持 <span class="fmt">DOCX</span><span class="fmt">PDF</span><span class="fmt">TXT</span></div>
+          <button class="pick" id="pick" type="button">选择文件</button>
+          <input type="file" id="file" class="hidden" accept=".docx,.pdf,.txt">
+        </div>
+        <p class="fine">
+          单个文件不超过 <b>20MB</b>。合成音频需要联网（edge-tts 是云端服务）；
+          如果所有词条都命中本地缓存，则不需要联网。生成好的包<b>播放时完全离线</b>，整个文件夹可以拷给别人。
+        </p>
+        <label class="opt" id="opt-pages">
+          <input type="checkbox" id="with-pages">
+          <span>
+            <span class="o1">按 Word 真实页码分页（可选，默认关）</span>
+            <span class="o2">只对 docx 有效，且本机要装了 Word。不勾选时按固定 50 词一组切分，
+              界面称「第 N 组」而不是「第 N 页」。</span>
+          </span>
+        </label>
+        <!-- 选完文件只是「已选」：必须点下面这个才上传 + 解析，不再自动跳步 -->
+        <div class="ok hidden" id="picked"></div>
+        <div class="warn hidden" id="up-warn"></div>
+        <div class="row-actions">
+          <button class="btn primary" id="do-upload" type="button" disabled>开始解析 →</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── 2 解析进度 ── -->
+    <section class="sec hidden" id="sec-progress">
+      <div class="sec-head">
+        <div class="sec-title" id="prog-title">正在解析</div>
+        <div class="phase" id="phase">—</div>
+      </div>
+      <div class="sec-body">
+        <div class="prog-head">
+          <span id="prog-msg" style="font-size:12.5px;color:var(--muted)">准备中…</span>
+          <span id="prog-eta" class="hidden"></span>
+          <b id="prog-pct">0%</b>
+        </div>
+        <div class="bar"><i id="bar"></i></div>
+        <div class="log" id="log"></div>
+        <div class="row-actions">
+          <button class="btn danger" id="cancel" type="button">取消</button>
+          <!-- 取消/出错后：退回上一个向导步骤（保留已选文件），比「重新开始」少一步 -->
+          <button class="btn ghost hidden" id="back" type="button">返回上一步</button>
+          <button class="btn ghost hidden" id="retry" type="button">重新开始</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── 3 校对 ── -->
+    <section class="sec hidden" id="sec-review">
+      <div class="sec-head">
+        <div class="sec-title">校对词表</div>
+        <div class="sec-sub" id="rv-sub">—</div>
+      </div>
+      <!-- 空页 / 低分页 / 只有 1 条的页：必须在这里出现一次，否则用户以为全进来了 -->
+      <div class="notice hidden" id="rv-warn"></div>
+      <div class="rv-tools">
+        <button class="chip on" id="f-all" type="button">全部</button>
+        <button class="chip" id="f-low" type="button">只看可疑</button>
+        <button class="chip" id="f-edit" type="button">只看已改</button>
+        <span class="pick-tools">
+          <button class="chip" id="pick-all" type="button" title="所有页都会提交">全选页</button>
+          <button class="chip" id="pick-none" type="button" title="一页都不提交">全不选</button>
+        </span>
+        <span class="sum" id="rv-sum">—</span>
+      </div>
+      <div class="sec-body" style="padding-top:0">
+        <div id="rv-hint"></div>
+        <details class="rules">
+          <summary>「可疑」是怎么判的？</summary>
+          <ul>
+            <li><b>中文栏以英文字母开头，或中文里根本没有汉字</b> —— 多半是释义被截断
+              （例如只剩「what is 的缩写形式」），也可能中英两列错位。</li>
+            <li><b>中文超过 24 字、英文超过 40 字符</b> —— 常是两行被并成一条，或例句混了进来。</li>
+            <li><b>英文栏里有汉字，或以数字开头</b> —— 列错位，或词表序号没剥干净。</li>
+            <li><b>解析评分低于 <code>0.90</code></b> 且没有上面这些明显特征 ——
+              只能提示"可能错位"，需要你对照原文档核一下。</li>
+          </ul>
+          <p style="margin:8px 0 0">
+            可疑只是<b>提醒</b>，不会拦住生成。点行尾的 <b>?</b> 看这一条的具体理由与建议；
+            改完文字后判定会<b>立刻重算</b>（改好的会自动摘掉标记）。
+          </p>
+        </details>
+        <div class="groups" id="groups"></div>
+        <div class="row-actions">
+          <!-- 上传区在进入校对后会被隐藏（向导只显示当前步骤），所以这里必须留出口 -->
+          <button class="btn ghost" id="restart" type="button">↺ 重新选择文件</button>
+          <button class="btn primary" id="to-target" type="button">下一步：选择生成方式</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── 4 生成目标 ── -->
+    <section class="sec hidden" id="sec-target">
+      <div class="sec-head">
+        <div class="sec-title">生成到哪里</div>
+        <div class="sec-sub">并入现有词库会保留原有页与音频</div>
+      </div>
+      <div class="sec-body">
+        <div class="radios">
+          <label class="radio on" id="r-merge">
+            <input type="radio" name="mode" value="merge" checked>
+            <span><span class="r1">并入现有词库</span>
+              <span class="r2">页号自动排到后面，不覆盖已有页</span></span>
+          </label>
+          <label class="radio" id="r-new">
+            <input type="radio" name="mode" value="new">
+            <span><span class="r1">新建独立词库</span>
+              <span class="r2">另开一个包，不动现有词库</span></span>
+          </label>
+        </div>
+
+        <div class="field" id="field-merge">
+          <label for="pack-select">目标词库</label>
+          <select class="input" id="pack-select"></select>
+          <div class="ok" id="merge-hint"></div>
+          <!-- 「50 词一组」并入「按页建」的词库 = 组和页错位，会重复词：先在选目标时提醒 -->
+          <div class="warn hidden" id="merge-warn"></div>
+          <!-- 后端 409（包内已有同名词条）落在这里，而不是跳到「出错了」那屏 -->
+          <div class="err hidden" id="merge-err"></div>
+        </div>
+
+        <div class="field hidden" id="field-new">
+          <label for="new-name">新词库名称（也是文件夹名）</label>
+          <input class="input" id="new-name" type="text" maxlength="60"
+                 placeholder="例如：高中英语词汇表" autocomplete="off">
+          <div class="err" id="new-err"></div>
+        </div>
+
+        <p class="fine" style="margin-top:14px">
+          合成阶段会逐词检查缓存；<b>已有词条不会重复调用 TTS</b>。
+          生成过程中请勿关闭这个页面 —— 任务在服务端跑，页面只是看进度。
+        </p>
+        <div class="row-actions">
+          <button class="btn primary" id="do-build" type="button">开始生成</button>
+          <button class="btn ghost" id="back-review" type="button">返回校对</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── 完成 ── -->
+    <section class="sec hidden" id="sec-done">
+      <div class="done-hero">
+        <div class="tick">✓</div>
+        <div>
+          <div class="d1" id="done-title">已生成</div>
+          <div class="d2" id="done-sub">—</div>
+        </div>
+      </div>
+      <div class="kv">
+        <div><b id="k-pages">—</b><span>本次新增页</span></div>
+        <div><b id="k-words">—</b><span>本次生成词条</span></div>
+        <div><b id="k-total">—</b><span>词库现有页</span></div>
+      </div>
+      <div class="sec-body" style="padding-top:0">
+        <!-- 书里本来就有的跨页重复词：放行，但必须让用户看见（不静默） -->
+        <div class="warn hidden" id="done-warn"></div>
+        <div class="row-actions">
+          <a class="btn primary" id="open-pack" href="#" target="_blank" rel="noopener">打开播放器</a>
+          <button class="btn" id="again" type="button">继续添加</button>
+        </div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+'use strict';
+
+var TOKEN = "__PET_TOKEN__";                 // serve.py 注入；file:// 下保持原样
+var VERSION = 'v2.1.1';             // v2.1.1：进度行加「预计 HH:MM 完成」
+var FILE_MODE = location.protocol === 'file:';
+var NO_TOKEN = TOKEN.indexOf('__PET') === 0;
+var GROUP_LOW = 0.9;                         // 低于它算「可疑」
+var AUTO_EXPAND_LIMIT = 200;                 // 筛选后自动展开的行数上限（懒渲染的护栏）
+
+var $ = function(s){ return document.querySelector(s); };
+var $$ = function(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); };
+
+var S = {
+  step: 1,
+  doc: null,
+  parseJob: null,
+  paged: false,
+  withPages: false,
+  pendingFile: null,          // 已选、还没点「开始解析」的文件
+  groups: [],
+  filter: 'all',
+  packs: [],
+  mode: 'merge',
+  packId: '',
+  buildJob: null,
+  activeJob: null,
+  job: null,
+  polling: false,
+  // 入口意图：/generator?pack=<id> → 预选并入；?mode=new → 直接新建
+  intent: {mode: null, pack: null}
+};
+
+/* ───────────── 基础 UI ───────────── */
+function toast(msg){
+  var t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(function(){ t.classList.remove('show'); }, 2600);
+}
+
+function setStep(n){
+  S.step = n;
+  $$('.step').forEach(function(el){
+    var i = parseInt(el.getAttribute('data-step'), 10);
+    el.classList.toggle('active', i === n);
+    el.classList.toggle('done', i < n);
+  });
+}
+
+function show(id){ $(id).classList.remove('hidden'); }
+function hide(id){ $(id).classList.add('hidden'); }
+
+function busy(on){
+  S.busy = !!on;
+  ['#to-target', '#do-build', '#back-review', '#again'].forEach(function(s){
+    var el = $(s); if (el) el.disabled = !!on;
+  });
+  if (!on) updateTargetGate();          // 恢复时要再看一眼「一页都没勾」这条
+}
+
+/* ───────────── 接口 ───────────── */
+function api(path, opts){
+  return fetch(path, opts || {}).then(function(r){
+    return r.text().then(function(txt){
+      var data = {};
+      try { data = JSON.parse(txt); } catch(e){ data = { error: txt.slice(0, 200) }; }
+      if (!r.ok) {
+        var err = new Error(data.error || ('HTTP ' + r.status));
+        err.status = r.status;
+        throw err;
+      }
+      return data;
+    });
+  });
+}
+
+function postJSON(path, body){
+  return api(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Token': TOKEN },
+    body: JSON.stringify(body || {})
+  });
+}
+
+var PHASES = {
+  pagescan: '扫描 Word 分页',
+  parse: '解析词条',
+  build: '合成音频',
+  stage: '打包暂存',
+  swap: '原子替换'
+};
+
+/* ───────────── 启动 ───────────── */
+function boot(){
+  $('#ver').textContent = VERSION;        // 只报版本，不报 host（排查时看这一行就够了）
+
+  // /generator?pack=<id> 预选并入目标；/generator?mode=new 直接新建（后者优先）
+  try {
+    var q = new URLSearchParams(location.search);
+    if (q.get('mode') === 'new') S.intent.mode = 'new';
+    var pk = q.get('pack');
+    if (pk) S.intent.pack = pk;
+  } catch (e) { /* 老浏览器：当作没带参数 */ }
+
+  if (FILE_MODE || NO_TOKEN) {
+    var n = $('#boot-notice');
+    n.className = 'notice';
+    n.innerHTML = '<b>这是用 file:// 直接打开的静态页面，不能上传。</b><br>' +
+      '生成功能由本机服务提供：在 vocab-tool 目录运行 <code>start_pet.bat</code>' +
+      '（或 <code>python serve.py 8901</code>）后打开 ' +
+      '<code>http://127.0.0.1:8901/generator</code>。' +
+      '已经生成好的词库包仍然可以双击 index.html 直接使用。';
+    hide('#app');
+    show('#boot-notice');
+    return;
+  }
+
+  if (isMobile()) { $('#mobile-gate').style.display = 'block'; return; }
+
+  wireUpload();
+  wireReview();
+  wireTarget();
+  loadPacks();
+  resumeLastJob();
+}
+
+/* 任务在服务端跑，页面只是看进度。刷新/重开页面后能接回正在跑的任务，
+   但服务重启过的旧任务已经没了 —— 那时只提示，不假装能续跑。 */
+function saveLastJob(id, kind){
+  try {
+    localStorage.setItem('petgen.job', JSON.stringify({
+      id: id, kind: kind, ts: Date.now(),
+      // 必须连 doc 一起存：只恢复 job id 的话，刷新后提交生成时 doc_id 是 null，
+      // 服务端 400（"doc_id 不合法"），用户看着校对表却点不动生成。
+      doc: S.doc ? { doc_id: S.doc.doc_id, name: S.doc.name, ext: S.doc.ext } : null,
+      withPages: !!S.withPages
+    }));
+  } catch(e){}
+}
+function clearLastJob(){
+  try { localStorage.removeItem('petgen.job'); } catch(e){}
+}
+function resumeLastJob(){
+  var raw = null;
+  try { raw = localStorage.getItem('petgen.job'); } catch(e){ return; }
+  if (!raw) return;
+  var rec = null;
+  try { rec = JSON.parse(raw); } catch(e){ clearLastJob(); return; }
+  if (!rec || !rec.id) { clearLastJob(); return; }
+  var stale = Date.now() - (rec.ts || 0) > 30 * 60 * 1000;
+  // 先问服务端任务还在不在 —— 不能只凭本地时间戳就把任务入口删掉
+  // （长任务跑过 30 分钟很常见，删了记录用户就再也回不到那份结果）。
+  api('/api/job/' + rec.id).then(function(j){
+    var running = ['queued','running','cancel_requested'].indexOf(j.state) >= 0;
+    if (running) {
+      if (rec.doc && rec.doc.doc_id) S.doc = rec.doc;
+      setStep(2);
+      hide('#sec-upload');
+      show('#sec-progress');
+      $('#prog-title').textContent = j.kind === 'build' ? '正在生成' : '正在解析';
+      if (j.kind === 'build') { poll(rec.id, onBuildState); }
+      else { S.parseJob = rec.id; poll(rec.id, onParseState); }
+      toast('已接续上次未完成的任务');
+      return;
+    }
+    if (j.state === 'done' && j.kind === 'parse' && rec.doc && rec.doc.doc_id) {
+      // 解析早就完成了：刷新后应该回到校对表，而不是从上传重新开始
+      S.doc = rec.doc;
+      S.parseJob = rec.id;
+      S.withPages = !!rec.withPages;
+      hide('#sec-upload');
+      toast('已恢复上次解析结果');
+      afterParse(j);
+      clearLastJob();
+      return;
+    }
+    if (j.state === 'done' && j.kind === 'build') {
+      toast('上次的生成任务已完成');
+      clearLastJob();
+      return;
+    }
+    if (j.state === 'interrupted') {
+      toast('上次任务因服务重启中断，请重新开始');
+      clearLastJob();
+      return;
+    }
+    clearLastJob();
+  }).catch(function(e){
+    // 404 = 服务端确实没有这个任务了 → 清记录
+    // 其它（网络/服务没起）= 记录先留着，等下次打开再说
+    if (e && e.status === 404) clearLastJob();
+    else if (stale) clearLastJob();
+  });
+}
+
+function isMobile(){
+  return window.matchMedia('(max-width:819px)').matches;
+}
+
+function loadPacks(){
+  return api('/api/packs').then(function(d){
+    S.packs = d.packs || [];
+    var sel = $('#pack-select');
+    sel.innerHTML = '';
+    if (!S.packs.length) {
+      var o = document.createElement('option');
+      o.value = ''; o.textContent = '（还没有词库，请选「新建独立词库」）';
+      sel.appendChild(o);
+      setMode('new');
+    } else {
+      S.packs.forEach(function(p){
+        var o = document.createElement('option');
+        o.value = p.id;
+        o.textContent = p.id + ' · ' + p.pages + ' 页 / ' + p.words + ' 词';
+        sel.appendChild(o);
+      });
+      // ?pack=<id> → 预选并入目标（找不到就退回第一个，不报错）
+      var want = S.intent && S.intent.pack;
+      var hit = want && S.packs.filter(function(p){ return p.id === want; })[0];
+      S.packId = hit ? hit.id : S.packs[0].id;
+      sel.value = S.packId;
+      if (S.intent && S.intent.mode === 'new') setMode('new');
+      else setMode('merge');
+      updateMergeHint();
+    }
+  }).catch(function(e){
+    toast('读取词库列表失败：' + e.message);
+  });
+}
+
+/* ───────────── 1. 上传 ───────────── */
+function wireUpload(){
+  var dz = $('#dropzone'), fi = $('#file');
+  var pick = $('#pick');
+
+  pick.addEventListener('click', function(e){
+    e.stopPropagation();
+    fi.click();
+  });
+  dz.addEventListener('click', function(){ fi.click(); });
+  dz.addEventListener('keydown', function(e){
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fi.click(); }
+  });
+  // 选文件只做校验 + 记下来，**不上传、不跳步** —— 用户点「开始解析」才动
+  fi.addEventListener('change', function(){
+    if (fi.files && fi.files[0]) chooseFile(fi.files[0]);
+    fi.value = '';
+  });
+  ['dragenter','dragover'].forEach(function(ev){
+    dz.addEventListener(ev, function(e){ e.preventDefault(); dz.classList.add('over'); });
+  });
+  ['dragleave','drop'].forEach(function(ev){
+    dz.addEventListener(ev, function(e){ e.preventDefault(); dz.classList.remove('over'); });
+  });
+  dz.addEventListener('drop', function(e){
+    var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) chooseFile(f);
+  });
+  // 勾选状态一变，「Word 没勾真实页码」的提示要跟着出现/消失
+  $('#with-pages').addEventListener('change', renderPicked);
+  $('#do-upload').addEventListener('click', function(){
+    if (S.pendingFile) startUpload(S.pendingFile);
+  });
+  $('#cancel').addEventListener('click', cancelJob);
+  $('#back').addEventListener('click', backStep);
+  $('#retry').addEventListener('click', function(){
+    resetToUpload();
+  });
+}
+
+/* 选完文件后的那一步：显示「已选了什么」+ 该说的话，等用户确认。 */
+function chooseFile(file){
+  if (S.polling && S.activeJob) {
+    toast('任务正在进行中，请先取消或等它结束'); return;
+  }
+  var ext = extOf(file.name);
+  if (['.docx','.pdf','.txt'].indexOf(ext) < 0) {
+    toast('只支持 docx / pdf / txt'); return;
+  }
+  if (file.size > 20 * 1024 * 1024) {
+    toast('文件超过 20MB'); return;
+  }
+  S.pendingFile = file;
+  renderPicked();
+  toast('已选择，确认无误后点「开始解析」');
+}
+
+function renderPicked(){
+  var f = S.pendingFile;
+  var box = $('#picked'), btn = $('#do-upload'), warn = $('#up-warn');
+  if (!box || !btn || !warn) return;
+  if (!f) {
+    box.textContent = ''; box.classList.add('hidden');
+    warn.textContent = ''; warn.classList.add('hidden');
+    btn.disabled = true;
+    return;
+  }
+  box.textContent = '已选择：' + f.name + '（' + fmtSize(f.size) + '）';
+  box.classList.remove('hidden');
+  btn.disabled = false;
+  // Word + 没勾真实页码 = 会按 50 词切组。这对「往已有词库追加第 N 页」是致命的：
+  // 组和页对不上，并入时必然和已有页重复。必须在**开跑前**说清楚。
+  var needWarn = extOf(f.name) === '.docx' && !$('#with-pages').checked;
+  if (needWarn) {
+    warn.textContent = '这是 Word 文档，但没勾「按 Word 真实页码分页」：会按固定 50 词一组切分，'
+      + '界面里显示「第 N 组」而不是「第 N 页」。要按书的页来（例如往已有词库追加第 5–7 页），'
+      + '请先勾上那个选项再点开始；否则组与页对不上，并入时容易和已有页重复。';
+    warn.classList.remove('hidden');
+  } else {
+    warn.textContent = '';
+    warn.classList.add('hidden');
+  }
+}
+
+function extOf(name){
+  var i = name.lastIndexOf('.');
+  return i < 0 ? '' : name.slice(i).toLowerCase();
+}
+
+/* 真正开始：上传 → 解析。只在用户点了「开始解析」之后调用。 */
+function startUpload(file){
+  var ext = extOf(file.name);
+  // 二道防线：chooseFile 已经校验过，这里防止被别处误调
+  if (['.docx','.pdf','.txt'].indexOf(ext) < 0) {
+    toast('只支持 docx / pdf / txt'); return;
+  }
+  if (file.size > 20 * 1024 * 1024) {
+    toast('文件超过 20MB'); return;
+  }
+  S.withPages = ext === '.docx' && $('#with-pages').checked;
+  S.doc = null;
+  S.groups = [];
+  setStep(2);
+  hide('#sec-upload');            /* 向导只有一步是"当前步骤"，上传区不该一直挂着 */
+  show('#sec-progress');
+  $('#prog-title').textContent = '正在上传';
+  $('#prog-msg').textContent = file.name;
+  $('#prog-pct').textContent = '0%';
+  setBar(0, false);
+  setLog(['上传：' + file.name + '（' + fmtSize(file.size) + '）']);
+  hide('#retry'); hide('#back');
+  show('#cancel');
+  $('#cancel').disabled = false;      // 上一轮取消把它 disable 了，新一轮要恢复
+
+  var xhr = new XMLHttpRequest();
+  xhr.open('POST', '/api/upload', true);
+  xhr.setRequestHeader('X-Token', TOKEN);
+  xhr.setRequestHeader('X-Filename', encodeURIComponent(file.name));
+  xhr.upload.onprogress = function(e){
+    if (!e.lengthComputable) return;
+    var pct = Math.round(e.loaded / e.total * 100);
+    $('#prog-pct').textContent = pct + '%';
+    setBar(pct, false);
+  };
+  xhr.onload = function(){
+    var data = {};
+    try { data = JSON.parse(xhr.responseText || '{}'); } catch(e){}
+    if (xhr.status !== 200) {
+      fail('上传被拒绝：' + (data.error || ('HTTP ' + xhr.status)));
+      return;
+    }
+    S.doc = data;
+    appendLog('已接收：' + data.name + '（sha256 ' + String(data.sha256).slice(0, 12) + '…）');
+    startParse();
+  };
+  xhr.onerror = function(){ fail('上传失败：网络中断'); };
+  xhr.send(file);
+}
+
+function startParse(){
+  $('#prog-title').textContent = '正在解析';
+  $('#prog-msg').textContent = '解析词条并分组…';
+  setBar(4, false);
+  etaReset();          // 解析阶段不报预计时间：进度是跳变的，报了反而误导
+  postJSON('/api/parse', { doc_id: S.doc.doc_id, with_pages: S.withPages })
+    .then(function(d){
+      S.parseJob = d.job_id;
+      poll(S.parseJob, onParseState);
+    })
+    .catch(function(e){ fail('解析请求失败：' + e.message); });
+}
+
+function setBar(pct, indet){
+  var bar = $('#bar');
+  bar.classList.toggle('indet', !!indet);
+  if (!indet) bar.style.width = Math.max(0, Math.min(100, pct)) + '%';
+}
+
+/* ── 预计完成时间（只给「合成音频 / 打包」这一段，解析是秒级跳动，报时间没意义）──
+   算法：取最近 ~90 秒里进度涨了多少个百分点 → 反推剩余。三点刻意为之：
+   1) 用**窗口差分**而不是全程平均：进度是两段拼出来的（合成 5→50、逐页拼接 50→85），
+      两段速度差好几倍，全程平均在切段后会长时间给出离谱的数字。
+   2) 另起 1 秒定时器：轮询会退到 15 秒一次，但倒计时必须每秒动一下 ——
+      一个不动的数字比没有更糟。
+   3) 进度不动时如实顺延（`left` 加上停滞时长），进度卡住超过 2 分半就干脆不显示，
+      不假装"马上就好"。
+   ⚠️ 这是估算，不是承诺：文案说"预计"，不是"保证"。 */
+var ETA = { samples: [], timer: null };
+
+function etaPad(n){ return (n < 10 ? '0' : '') + n; }
+
+function etaReset(){
+  if (ETA.timer) { clearInterval(ETA.timer); ETA.timer = null; }
+  ETA.samples = [];
+  var el = $('#prog-eta');
+  if (el) { el.textContent = ''; el.title = ''; el.classList.add('hidden'); }
+}
+
+/* 百分点 / 秒；样本不足或没在涨就返回 0（= 不显示） */
+function etaRate(){
+  var s = ETA.samples;
+  if (s.length < 2) return 0;
+  var a = s[0], b = s[s.length - 1];
+  var dt = (b.t - a.t) / 1000;
+  var dp = b.p - a.p;
+  if (dt < 1 || dp < 0.5) return 0;
+  return dp / dt;
+}
+
+function etaSample(p){
+  var now = Date.now();
+  var s = ETA.samples;
+  if (s.length && Math.abs(p - s[s.length - 1].p) < 0.01) return;   // 没涨就不记，别把速率摊平
+  s.push({ t: now, p: p });
+  while (s.length > 12) s.shift();
+  while (s.length > 2 && now - s[0].t > 90000) s.shift();
+  if (!ETA.timer) ETA.timer = setInterval(etaTick, 1000);
+  etaTick();
+}
+
+function etaTick(){
+  var el = $('#prog-eta');
+  if (!el) return;
+  var s = ETA.samples;
+  var rate = etaRate();
+  if (!rate) { el.classList.add('hidden'); return; }
+  var last = s[s.length - 1];
+  var idle = (Date.now() - last.t) / 1000;
+  if (idle > 150) { el.classList.add('hidden'); return; }      // 卡了 2 分半：不猜了
+  // need 从「最后一次进度变化」起算，所以完成时刻 = last.t + need 是个**固定的绝对时刻**
+  // （只在新采样到来时重算）—— 这样数字不会每秒往后跳，只在估计变化时修正。
+  var need = (100 - last.p) / rate;
+  var left = need - idle;                                      // 从现在起还需多久
+  if (last.p >= 99.5 || left <= 8) {
+    el.textContent = '即将完成';
+    el.title = '按最近进度推算';
+  } else {
+    var d = new Date(last.t + need * 1000);
+    el.textContent = '预计 ' + etaPad(d.getHours()) + ':' + etaPad(d.getMinutes()) + ' 完成';
+    el.title = '还需约 ' + (left < 90 ? Math.round(left) + ' 秒' : Math.round(left / 60) + ' 分钟')
+             + '（按最近约 1 分半的进度推算，不是承诺）';
+  }
+  el.classList.remove('hidden');
+}
+
+function setLog(lines){
+  var box = $('#log');
+  box.textContent = (lines || []).join('\n');
+  box.scrollTop = box.scrollHeight;
+}
+
+function appendLog(line){
+  var box = $('#log');
+  box.textContent = (box.textContent ? box.textContent + '\n' : '') + line;
+  box.scrollTop = box.scrollHeight;
+}
+
+function poll(jobId, onState){
+  if (S.polling) return;
+  S.polling = true;
+  S.activeJob = jobId;
+  saveLastJob(jobId, onState === onBuildState ? 'build' : 'parse');
+  var t0 = Date.now();
+
+  function delay(){
+    var el = (Date.now() - t0) / 1000;
+    if (el < 60) return 1500;
+    if (el < 180) return 5000;
+    return 15000;
+  }
+  function tick(){
+    api('/api/job/' + jobId).then(function(j){
+      S.job = j;
+      onState(j);
+      if (['done','error','canceled','interrupted'].indexOf(j.state) >= 0) {
+        S.polling = false;
+        clearLastJob();
+        return;
+      }
+      setTimeout(tick, delay());
+    }).catch(function(e){
+      S.polling = false;
+      fail('读取任务状态失败：' + e.message);
+    });
+  }
+  tick();
+}
+
+function onParseState(j){
+  $('#phase').textContent = PHASES[j.phase] || j.phase || '—';
+  var p = Number(j.progress || 0);
+  $('#prog-pct').textContent = Math.round(p) + '%';
+  setBar(p, j.state === 'queued');
+  if (j.message) $('#prog-msg').textContent = j.message;
+  if (j.log_tail) setLog(j.log_tail);
+
+  if (j.state === 'done') return afterParse(j);
+  if (j.state === 'canceled') { fail('已取消', {back: true}); return; }
+  if (j.state === 'interrupted') {
+    fail('服务重启导致任务中断，请重新开始'); return;
+  }
+  if (j.state === 'error') fail(j.error || '解析失败');
+}
+
+function afterParse(j){
+  var r = j.result || {};
+  api('/api/preview?job=' + S.parseJob).then(function(pv){
+    S.paged = !!pv.paged;
+    S.groups = (pv.groups || []).map(function(g){
+      return {
+        page: g.page,
+        open: false,
+        on: true,                    // 默认全选：不动它就是原来的行为
+        pairs: (g.pairs || []).map(function(p, i){
+          return { en: p[0], cn: p[1], score: (g.scores || [])[i] || 0, dirty: false };
+        })
+      };
+    });
+    hide('#sec-progress');
+    hide('#sec-upload');
+    show('#sec-review');
+    setStep(3);
+    $('#rv-sub').textContent = S.paged ? '按真实页码，共 ' + S.groups.length + ' 页'
+                                      : '按固定条数分组，共 ' + S.groups.length + ' 组';
+    renderDiagnostics(pv.diagnostics);
+    if (S.withPages && !S.paged) {
+      appendLog('⚠️ 未能按 Word 真实页码分页，已按固定条数分组');
+      toast('未能按 Word 真实页码分页，已按固定条数分组');
+    }
+    renderGroups();
+  }).catch(function(e){ fail('读取解析结果失败：' + e.message); });
+}
+
+/* 空页 / 低分页 / 只有 1 条的页必须显式告诉用户 ——
+   words.csv 只能表达"成功的页"，不把这些说出来 = 用户永远不知道漏了一页。 */
+function renderDiagnostics(d){
+  var box = $('#rv-warn');
+  if (!box) return;
+  d = d || {};
+  var empty = d.empty_pages || [], thin = d.thin_pages || [], low = d.skipped_pages || [];
+  box.textContent = '';
+  if (!empty.length && !thin.length && !low.length) { box.classList.add('hidden'); return; }
+  function add(head, rest){
+    var b = document.createElement('b');
+    b.textContent = head;
+    box.appendChild(b);
+    box.appendChild(document.createTextNode(rest));
+    box.appendChild(document.createElement('br'));
+  }
+  if (empty.length) add(empty.length + ' 页没有抽出词条，校对表里不会出现这些页：',
+    empty.slice(0, 12).map(function(p){
+      return '第' + p.page + '页（' + (p.reason || '未抽取') + '）';
+    }).join('、') + (empty.length > 12 ? ' …' : ''));
+  if (thin.length) add(thin.length + ' 页只抽出 1 条，可能漏词：',
+    thin.slice(0, 12).map(function(p){ return '第' + p.page + '页'; }).join('、') +
+    (thin.length > 12 ? ' …' : ''));
+  if (low.length) add(low.length + ' 页均分偏低（已保留，建议先校对）：',
+    low.slice(0, 12).map(function(p){ return '第' + p.page + '页'; }).join('、') +
+    (low.length > 12 ? ' …' : ''));
+  var tail = document.createElement('div');
+  tail.style.marginTop = '6px';
+  tail.textContent = '以上几页请回原文件核对：漏页与漏词不会自己出现在校对表里。';
+  box.appendChild(tail);
+  box.classList.remove('hidden');
+}
+
+/* opts.back = 允许「返回上一步」（取消时用：用户想改勾选/换文件重来，不想从零开始） */
+function fail(msg, opts){
+  $('#prog-title').textContent = '出错了';
+  $('#prog-msg').textContent = msg;
+  setBar(0, false);
+  appendLog('✗ ' + msg);
+  hide('#cancel');
+  show('#retry');
+  if (opts && opts.back) show('#back'); else hide('#back');
+}
+
+function cancelJob(){
+  var jid = S.activeJob;
+  if (!jid) return;
+  $('#cancel').disabled = true;
+  postJSON('/api/cancel', { job_id: jid }).then(function(){
+    appendLog('已请求取消…');
+    toast('已请求取消');
+  }).catch(function(e){
+    toast('取消失败：' + e.message);
+  }).then(function(){
+    setTimeout(function(){ $('#cancel').disabled = false; }, 1200);
+  });
+}
+
+/* ───────────── 2. 校对 ───────────── */
+function wireReview(){
+  $$('.chip').forEach(function(c){
+    c.addEventListener('click', function(){
+      var f = c.id === 'f-low' ? 'low' : (c.id === 'f-edit' ? 'edit' : 'all');
+      setFilter(f);
+    });
+  });
+  var rs = $('#restart');
+  if (rs) rs.addEventListener('click', function(){ resetToUpload(); });
+  $('#to-target').addEventListener('click', function(){
+    if (!counts().selGroups) { toast('还没有勾选任何一页'); return; }
+    setStep(4);
+    hide('#sec-review');
+    show('#sec-target');
+    updateMergeHint();
+  });
+}
+
+/* 「可疑」不能只给一个红框 —— 用户必须知道**为什么**、**该怎么做**。
+   判定按内容算（en/cn 文本），所以改完输入框会立刻重算；
+   解析评分只在「没改过 且 内容看不出问题」时才作为提示，避免用户改完还挂着旧标记。
+   阈值 24 / 40 与 build_vocab.py 的 score_pair() 一致。 */
+var CN_MAX = 24, EN_MAX = 40;
+
+function reasonsOf(r){
+  var out = [];
+  var en = r.en || '', cn = r.cn || '';
+  var cnT = cn.trim(), enT = en.trim();
+
+  if (!cnT) {
+    out.push({ t: '中文是空的',
+      h: '这行提交时会被丢掉（英文和中文都非空才入库）。补上中文，或直接删掉这行。' });
+  } else if (/^[A-Za-z]/.test(cnT)) {
+    out.push({ t: '中文栏以英文字母开头',
+      h: '常见于中文释义被截断，只剩下「what is 的缩写形式」这类英文说明（word 表里的括号注释被拆开）；'
+        + '也可能这一行整条都是英文。把中文补全成真正的释义，或删掉这行。' });
+  } else if (!/[\u4e00-\u9fff]/.test(cnT)) {
+    out.push({ t: '中文栏里没有汉字',
+      h: '可能中英两列写反了，也可能整行都是英文。确认后把中文填进右栏。' });
+  }
+
+  if (cnT.length > CN_MAX) {
+    out.push({ t: '中文过长（' + cnT.length + ' 字，阈值 ' + CN_MAX + '）',
+      h: '多半是两行被并成了一条，或例句/词性说明混进来。只保留这个词的中文释义。' });
+  }
+  if (enT.length > EN_MAX) {
+    out.push({ t: '英文过长（' + enT.length + ' 字符，阈值 ' + EN_MAX + '）',
+      h: '多半是两条并成一条，或整句例句。只保留单词本身（词组也可以，但要确认没把下一条粘上来）。' });
+  }
+  if (/[\u4e00-\u9fff]/.test(enT)) {
+    out.push({ t: '英文栏里有汉字',
+      h: '中英两列可能错位。把英文放左栏、中文放右栏。' });
+  }
+  if (/^\s*\d/.test(enT)) {
+    out.push({ t: '英文以数字开头',
+      h: '原文档的序号没剥干净（如「12 what」）。把开头的数字删掉。' });
+  }
+  if (!out.length && !r.dirty && Number(r.score) < GROUP_LOW) {
+    out.push({ t: '解析评分偏低（' + Number(r.score).toFixed(2) + '，阈值 ' + GROUP_LOW.toFixed(2) + '）',
+      h: '这一行没有上面那些明显特征，只能怀疑英文与中文对错了行。'
+        + '请对照原文档核一遍；确认没问题就不用动它。' });
+  }
+  return out;
+}
+
+function isSusp(r){
+  return reasonsOf(r).length > 0;
+}
+
+function counts(){
+  var words = 0, dirty = 0, susp = 0, groups = S.groups.length;
+  var selGroups = 0, selWords = 0;
+  S.groups.forEach(function(g){
+    var n = 0;
+    g.pairs.forEach(function(r){
+      words++;
+      n++;
+      if (r.dirty) dirty++;
+      if (isSusp(r)) susp++;
+    });
+    if (g.on) { selGroups++; selWords += n; }
+  });
+  return { groups: groups, words: words, dirty: dirty, susp: susp,
+           selGroups: selGroups, selWords: selWords };
+}
+
+function matches(r){
+  if (S.filter === 'low') return isSusp(r);
+  if (S.filter === 'edit') return !!r.dirty;
+  return true;
+}
+
+function setFilter(f){
+  S.filter = f;
+  $('#f-all').classList.toggle('on', f === 'all');
+  $('#f-low').classList.toggle('on', f === 'low');
+  $('#f-edit').classList.toggle('on', f === 'edit');
+  renderGroups();
+}
+
+function unitName(){ return S.paged ? '页' : '组'; }
+
+function renderGroups(){
+  var box = $('#groups');
+  box.innerHTML = '';
+  var c = counts();
+  var visible = 0, matched = 0;
+  var expandBudget = 0;
+
+  S.groups.forEach(function(g, gi){
+    var rows = g.pairs.filter(matches);
+    if (S.filter !== 'all' && !rows.length) return;
+    visible++;
+    matched += rows.length;
+  });
+
+  var autoExpand = (S.filter !== 'all' && matched <= AUTO_EXPAND_LIMIT);
+
+  S.groups.forEach(function(g, gi){
+    var rows = g.pairs.filter(matches);
+    if (S.filter !== 'all' && !rows.length) return;
+
+    var el = document.createElement('div');
+    el.className = 'g' + (g.on ? '' : ' off');
+    el.setAttribute('data-g', gi);
+
+    // 勾选格：与「折叠头」并列，而不是嵌在它里面（交互元素不能嵌套）
+    var pick = document.createElement('label');
+    pick.className = 'g-pick';
+    pick.title = '勾上 = 这一页会提交；取消 = 不提交';
+    pick.innerHTML = '<input type="checkbox" class="pick" data-g="' + gi + '"' +
+      (g.on ? ' checked' : '') +
+      ' aria-label="第 ' + g.page + ' ' + unitName() + '是否提交">';
+
+    var head = document.createElement('button');
+    head.type = 'button';
+    head.className = 'g-head';
+    head.setAttribute('data-g', gi);
+    head.setAttribute('aria-expanded', g.open ? 'true' : 'false');
+
+    var suspN = g.pairs.filter(isSusp).length;
+    var dirtyN = g.pairs.filter(function(r){ return r.dirty; }).length;
+    head.innerHTML =
+      '<span class="g-no">第 ' + g.page + ' ' + unitName() + '</span>' +
+      '<span class="g-words">' + g.pairs.length + ' 词</span>' +
+      '<span class="g-span"></span>' +
+      (suspN ? '<span class="g-badge click" title="点一下只看可疑">可疑 ' + suspN + '</span>' : '') +
+      (dirtyN ? '<span class="g-badge mut">已改 ' + dirtyN + '</span>' : '') +
+      '<span class="g-chev">▼</span>';
+    head.querySelector('.g-span').textContent =
+      (g.pairs[0] ? g.pairs[0].en : '') + ' … ' +
+      (g.pairs.length ? g.pairs[g.pairs.length - 1].en : '');
+
+    var body = document.createElement('div');
+    body.className = 'g-body';
+    body.setAttribute('data-body', gi);
+
+    el.appendChild(pick);
+    el.appendChild(head);
+    el.appendChild(body);
+    box.appendChild(el);
+
+    if (autoExpand) g.open = true;
+    if (g.open) {
+      head.setAttribute('aria-expanded', 'true');
+      el.classList.add('open');
+      fillBody(gi, el);
+    }
+  });
+
+  if (S.filter !== 'all' && matched > AUTO_EXPAND_LIMIT) {
+    $('#rv-hint').innerHTML = '<div class="hintbar">筛选出 ' + matched +
+      ' 行，超过 ' + AUTO_EXPAND_LIMIT + ' 行，未自动展开 —— 点组标题按组展开（每组只渲染展开的那部分）。</div>';
+  } else {
+    $('#rv-hint').innerHTML = '';
+  }
+
+  $('#rv-sum').innerHTML = summaryHTML();
+  updateTargetGate();
+}
+
+/* 摘要统一从这里出：改行、删行、勾/取消勾页之后都是同一句，避免两处文案漂移。
+   「已选 N 页 / M 词」只在**有页没被勾上**时追加 —— 全选是默认，别把同一组数字说两遍。 */
+function summaryHTML(){
+  var c = counts();
+  return '共 <b>' + c.groups + '</b> ' + unitName() + ' / <b>' + c.words + '</b> 词' +
+    (c.susp ? ' · 可疑 <b>' + c.susp + '</b>' : '') +
+    (c.dirty ? ' · 已改 <b>' + c.dirty + '</b>' : '') +
+    (c.selGroups !== c.groups
+      ? ' · 已选 <b>' + c.selGroups + '</b> ' + unitName() + ' / <b>' + c.selWords + '</b> 词'
+      : '');
+}
+
+/* 勾 / 不勾某一页。只影响「提交哪些页」，绝不改词条内容与顺序。 */
+function setPick(gi, on){
+  var g = S.groups[gi];
+  if (!g) return;
+  g.on = !!on;
+  var wrap = $('#groups').querySelector('.g[data-g="' + gi + '"]');
+  if (wrap) {
+    wrap.classList.toggle('off', !g.on);
+    var cb = wrap.querySelector('.pick');
+    if (cb && cb.checked !== g.on) cb.checked = g.on;
+  }
+  refreshCounters();
+  updateMergeHint();
+}
+
+/* 全选 / 全不选：连没渲染出来的组（被筛选藏起来的）也一起改状态 */
+function setAllPicks(on){
+  S.groups.forEach(function(g){ g.on = !!on; });
+  Array.prototype.forEach.call($('#groups').querySelectorAll('.g'), function(w){
+    w.classList.toggle('off', !on);
+    var cb = w.querySelector('.pick');
+    if (cb) cb.checked = !!on;
+  });
+  refreshCounters();
+  updateMergeHint();
+}
+
+/* 一页都没勾 → 直接把「下一步」按死，别让人点到目标卡才发现没内容 */
+function updateTargetGate(){
+  var btn = $('#to-target');
+  if (!btn) return;
+  var c = counts();
+  var none = c.selGroups === 0;
+  btn.disabled = none;
+  btn.title = none ? '还没有勾选任何一页' : '';
+}
+
+function fillBody(gi, el){
+  var g = S.groups[gi];
+  var body = el.querySelector('.g-body');
+  var rows = [];
+  g.pairs.forEach(function(r, ri){ if (matches(r)) rows.push(ri); });
+
+  if (!rows.length) {
+    body.innerHTML = '<div class="empty">这一组没有符合筛选条件的词条</div>';
+    return;
+  }
+
+  var t = document.createElement('table');
+  t.className = 't';
+  var html = '<thead><tr><th class="c-i">#</th><th>英文</th><th>中文</th>' +
+             '<th class="c-w"></th><th class="c-x"></th></tr></thead><tbody>';
+  rows.forEach(function(ri){
+    var r = g.pairs[ri];
+    var rs = reasonsOf(r);
+    var cls = (r.dirty ? 'dirty ' : '') + (rs.length ? 'susp' : '');
+    html += '<tr class="' + cls + '" data-g="' + gi + '" data-r="' + ri + '">' +
+      '<td class="i">' + (ri + 1) + '</td>' +
+      '<td><input class="cell" data-g="' + gi + '" data-r="' + ri + '" data-f="en" ' +
+      'value="" spellcheck="false" aria-label="第 ' + (ri + 1) + ' 条英文"></td>' +
+      '<td><input class="cell" data-g="' + gi + '" data-r="' + ri + '" data-f="cn" ' +
+      'value="" spellcheck="false" aria-label="第 ' + (ri + 1) + ' 条中文"></td>' +
+      '<td><button class="why-btn' + (rs.length ? '' : ' hidden') + '" type="button" ' +
+      'data-g="' + gi + '" data-r="' + ri + '" aria-expanded="false" ' +
+      'title="看这一条为什么可疑、该怎么改" ' +
+      'aria-label="看第 ' + (ri + 1) + ' 条的可疑理由">?</button></td>' +
+      '<td><button class="del" type="button" data-g="' + gi + '" data-r="' + ri +
+      '" title="删除这一行" aria-label="删除第 ' + (ri + 1) + ' 行">✕</button></td>' +
+      '</tr>';
+  });
+  html += '</tbody>';
+  t.innerHTML = html;
+  body.innerHTML = '';
+  body.appendChild(t);
+
+  // 用 value 属性赋值，避免把用户内容当 HTML 解析
+  Array.prototype.forEach.call(t.querySelectorAll('input.cell'), function(inp){
+    var gi2 = inp.getAttribute('data-g'), ri2 = inp.getAttribute('data-r');
+    var f = inp.getAttribute('data-f');
+    inp.value = S.groups[gi2].pairs[ri2][f];
+  });
+}
+
+function wireGroupEvents(){
+  var box = $('#groups');
+
+  box.addEventListener('click', function(e){
+    // 组头的「可疑 N」徽标 = 一键切到「只看可疑」（别再让用户去别处找）
+    if (e.target.closest('.g-badge')) {
+      if (S.filter !== 'low') setFilter('low');
+      return;
+    }
+    var head = e.target.closest('.g-head');
+    if (head) {
+      var gi = parseInt(head.getAttribute('data-g'), 10);
+      var g = S.groups[gi];
+      var wrap = head.parentNode;
+      g.open = !g.open;
+      wrap.classList.toggle('open', g.open);
+      head.setAttribute('aria-expanded', g.open ? 'true' : 'false');
+      if (g.open) fillBody(gi, wrap);
+      else wrap.querySelector('.g-body').innerHTML = '';   // 折叠即释放 DOM
+      return;
+    }
+    var why = e.target.closest('.why-btn');
+    if (why) {
+      var gw = parseInt(why.getAttribute('data-g'), 10);
+      var rw = parseInt(why.getAttribute('data-r'), 10);
+      var tr0 = why.closest('tr');
+      var next = tr0.nextSibling;
+      if (next && next.classList && next.classList.contains('why-row')) {
+        next.remove();                      // 再点一次收起
+        why.setAttribute('aria-expanded', 'false');
+        return;
+      }
+      // 同一组里只展开一条，别把表格撑得很长
+      Array.prototype.forEach.call(
+        tr0.parentNode.querySelectorAll('.why-row'),
+        function(x){ x.remove(); });
+      Array.prototype.forEach.call(
+        tr0.parentNode.querySelectorAll('.why-btn'),
+        function(x){ x.setAttribute('aria-expanded', 'false'); });
+      tr0.parentNode.insertBefore(buildWhyRow(gw, rw), tr0.nextSibling);
+      why.setAttribute('aria-expanded', 'true');
+      return;
+    }
+    var del = e.target.closest('.del');
+    if (del) {
+      var g2 = parseInt(del.getAttribute('data-g'), 10);
+      var r2 = parseInt(del.getAttribute('data-r'), 10);
+      S.groups[g2].pairs.splice(r2, 1);
+      var wrap2 = box.querySelector('.g[data-g="' + g2 + '"]');
+      fillBody(g2, wrap2);
+      refreshCounters();
+    }
+  });
+
+  // 勾选页：只改「这一页要不要提交」，不动词条
+  box.addEventListener('change', function(e){
+    var cb = e.target;
+    if (!cb.classList || !cb.classList.contains('pick')) return;
+    setPick(parseInt(cb.getAttribute('data-g'), 10), cb.checked);
+  });
+
+  box.addEventListener('input', function(e){
+    var inp = e.target;
+    if (!inp.classList || !inp.classList.contains('cell')) return;
+    var gi = parseInt(inp.getAttribute('data-g'), 10);
+    var ri = parseInt(inp.getAttribute('data-r'), 10);
+    var f = inp.getAttribute('data-f');
+    var row = S.groups[gi].pairs[ri];
+    row[f] = inp.value;
+    row.dirty = true;
+    var tr = inp.closest('tr');
+    if (tr) {
+      tr.classList.add('dirty');
+      // 改完立刻重算：红框和「?」都跟着走，理由面板内容已过期就收起
+      var susp = reasonsOf(row).length > 0;
+      tr.classList.toggle('susp', susp);
+      var wb = tr.querySelector('.why-btn');
+      if (wb) {
+        wb.classList.toggle('hidden', !susp);
+        if (!susp) wb.setAttribute('aria-expanded', 'false');
+      }
+      var nx = tr.nextSibling;
+      if (nx && nx.classList && nx.classList.contains('why-row')) nx.remove();
+    }
+    refreshCounters();
+  });
+}
+
+function buildWhyRow(gi, ri){
+  var r = S.groups[gi].pairs[ri];
+  var rs = reasonsOf(r);
+  var tr = document.createElement('tr');
+  tr.className = 'why-row';
+  var td = document.createElement('td');
+  td.colSpan = 5;
+
+  var wrap = document.createElement('div');
+  wrap.className = 'why';
+
+  var t = document.createElement('div');
+  t.className = 'why-t';
+  t.textContent = rs.length
+    ? '第 ' + (ri + 1) + ' 条被判为可疑，共 ' + rs.length + ' 个理由：'
+    : '第 ' + (ri + 1) + ' 条现在看不出问题了。';
+  wrap.appendChild(t);
+
+  if (rs.length) {
+    var ul = document.createElement('ul');
+    rs.forEach(function(x){
+      var li = document.createElement('li');
+      var b = document.createElement('b');
+      b.textContent = x.t;
+      var sp = document.createElement('span');
+      sp.textContent = '建议：' + x.h;
+      li.appendChild(b);
+      li.appendChild(sp);
+      ul.appendChild(li);
+    });
+    wrap.appendChild(ul);
+  }
+
+  var foot = document.createElement('div');
+  foot.className = 'why-foot';
+  foot.textContent = '可疑只是提醒，不会拦住生成。在上面两个输入框里改完，判定会立刻重算；'
+    + '确认这条本来就对，也可以原样保留。';
+  wrap.appendChild(foot);
+
+  td.appendChild(wrap);
+  tr.appendChild(td);
+  return tr;
+}
+
+function refreshCounters(){
+  $('#rv-sum').innerHTML = summaryHTML();
+  updateTargetGate();
+  // 组头徽标跟着变（不重建 DOM，避免输入焦点丢失）
+  S.groups.forEach(function(g, gi){
+    var wrap = $('#groups').querySelector('.g[data-g="' + gi + '"]');
+    if (!wrap) return;
+    var head = wrap.querySelector('.g-head');
+    var suspN = g.pairs.filter(isSusp).length;
+    var dirtyN = g.pairs.filter(function(r){ return r.dirty; }).length;
+    // 删行后组头的词数/首尾词也要跟着变，否则「组头说 8 词、表里 7 行」
+    var wEl = head.querySelector('.g-words');
+    if (wEl) wEl.textContent = g.pairs.length + ' 词';
+    var sEl = head.querySelector('.g-span');
+    if (sEl) {
+      sEl.textContent = (g.pairs[0] ? g.pairs[0].en : '') + ' … ' +
+        (g.pairs.length ? g.pairs[g.pairs.length - 1].en : '');
+    }
+    var badges = head.querySelectorAll('.g-badge');
+    Array.prototype.forEach.call(badges, function(b){ b.remove(); });
+    var chev = head.querySelector('.g-chev');
+    if (suspN) {
+      var b1 = document.createElement('span');
+      b1.className = 'g-badge click'; b1.textContent = '可疑 ' + suspN;
+      b1.title = '点一下只看可疑';
+      head.insertBefore(b1, chev);
+    }
+    if (dirtyN) {
+      var b2 = document.createElement('span');
+      b2.className = 'g-badge mut'; b2.textContent = '已改 ' + dirtyN;
+      head.insertBefore(b2, chev);
+    }
+  });
+}
+
+/* ───────────── 3. 目标 ───────────── */
+function wireTarget(){
+  $$('input[name=mode]').forEach(function(r){
+    r.addEventListener('change', function(){ setMode(r.value); });
+  });
+  $('#pack-select').addEventListener('change', function(){
+    S.packId = $('#pack-select').value;
+    updateMergeHint();
+  });
+  $('#new-name').addEventListener('input', validateName);
+  $('#pick-all').addEventListener('click', function(){ setAllPicks(true); });
+  $('#pick-none').addEventListener('click', function(){ setAllPicks(false); });
+  $('#back-review').addEventListener('click', function(){
+    setStep(3); hide('#sec-target'); show('#sec-review');
+  });
+  $('#do-build').addEventListener('click', doBuild);
+  $('#again').addEventListener('click', function(){ resetToUpload(); });
+  wireGroupEvents();
+}
+
+function setMode(m){
+  S.mode = m;
+  $('#r-merge').classList.toggle('on', m === 'merge');
+  $('#r-new').classList.toggle('on', m === 'new');
+  $$('input[name=mode]').forEach(function(r){ r.checked = (r.value === m); });
+  if (m === 'merge') { show('#field-merge'); hide('#field-new'); updateMergeHint(); }
+  else { hide('#field-merge'); show('#field-new'); validateName(); }
+}
+
+function currentPack(){
+  return S.packs.filter(function(p){ return p.id === S.packId; })[0] || null;
+}
+
+function updateMergeHint(){
+  var p = currentPack();
+  var el = $('#merge-hint');
+  var warn = $('#merge-warn'), err = $('#merge-err');
+  // 用户一改选择/勾选，上一条拦截就作废（别让旧报错挂在那吓人）
+  if (err) { err.textContent = ''; err.classList.add('hidden'); }
+  if (warn) {
+    // 「50 词一组」并入「按页建」的词库 = 组和页错位 → 必撞重复词，先说清楚
+    var mis = S.mode === 'merge' && S.groups.length > 0 && !S.paged;
+    warn.textContent = mis
+      ? '这批词是「固定 50 词一组」，不是书的页。并入按页建的词库时，组与页对不上：'
+        + '比如第 2 组从第 51 个词开始，而包的第 1 页可能正好到第 57 个词，两页就重复了 7 个词。'
+        + '请勾选「按 Word 真实页码分页」重新扫描，再只加书里还没进包的那几页。'
+      : '';
+    warn.classList.toggle('hidden', !mis);
+  }
+  if (!p) { el.textContent = ''; return; }
+  // 起点必须用「现有最大页号」，不是「页数」：单页包（pages=1、页号是 2）两者会差一页。
+  // 后端 _build_body 的 offset 就是 max_page。
+  var base = parseInt(p.max_page, 10) || parseInt(p.pages, 10) || 0;
+  var head = '现有 ' + p.pages + ' 页 / ' + p.words + ' 词；';
+  var tail = '原有页与音频保持不变。';
+  var c = counts();
+  if (!S.groups.length) {
+    // 还没解析时不能在界面上写「本次 0 页」—— 那是把"未知"说成"零"
+    el.textContent = head + '新生成的页会排到第 ' + (base + 1) + ' 页起。' + tail;
+    return;
+  }
+  if (!c.selGroups) {
+    el.textContent = head + '还没有勾选任何一页 —— 勾上要加进去的那几页再生成。' + tail;
+    return;
+  }
+  var a = base + 1, b = base + c.selGroups;
+  var where = (c.selGroups === 1) ? ('第 ' + a + ' 页') : ('第 ' + a + '–' + b + ' 页');
+  var skip = (c.selGroups === c.groups) ? '' :
+    ('未勾选的 ' + (c.groups - c.selGroups) + ' ' + unitName() + '不会提交。');
+  el.textContent = head + '本次已选 ' + c.selGroups + ' ' + unitName() + '，会排到' + where +
+    '。' + skip + tail;
+}
+
+function validateName(){
+  var v = $('#new-name').value.trim();
+  var err = $('#new-err');
+  err.textContent = '';
+  if (!v) { err.textContent = '请填写名称'; return false; }
+  if (/[\\/:*?"<>|]/.test(v)) { err.textContent = '名称不能包含 \\ / : * ? " < > |'; return false; }
+  if (S.packs.some(function(p){ return p.id === v; })) {
+    err.textContent = '已存在同名词库，请换一个名字（或改用「并入现有词库」）';
+    return false;
+  }
+  return true;
+}
+
+function collectRows(){
+  // 只提交**勾选的页**，并按选中顺序把页号压成 1..k：
+  // 后端再统一加 offset（现有最大页），于是包里的新页一定是连续的 ——
+  // 不会出现「共 5 页，却有一张写着第 11 页」这种自相矛盾的册子。
+  // 全选时 1..k 与原页号完全一致，行为与以前一模一样。
+  var rows = [], seq = 0;
+  S.groups.forEach(function(g){
+    if (!g.on) return;
+    var pg = seq + 1, n = 0;
+    g.pairs.forEach(function(r){
+      var en = (r.en || '').trim(), cn = (r.cn || '').trim();
+      if (en && cn) { rows.push({ page: pg, en: en, cn: cn }); n++; }
+    });
+    if (n) seq++;                 // 整页都空（被删光）→ 不占号，不留空页
+  });
+  return rows;
+}
+
+function doBuild(){
+  var rows = collectRows();
+  if (!rows.length) {
+    toast(counts().selGroups ? '没有可生成的词条' : '还没有勾选任何一页');
+    return;
+  }
+  var body = { doc_id: S.doc ? S.doc.doc_id : null, job: S.parseJob, rows: rows, mode: S.mode };
+  if (S.mode === 'merge') {
+    if (!S.packId) { toast('请选择目标词库'); return; }
+    body.pack_id = S.packId;
+    body.name = S.packId;
+  } else {
+    if (!validateName()) { toast($('#new-err').textContent); return; }
+    body.name = $('#new-name').value.trim();
+    body.pack_id = body.name;
+  }
+  busy(true);
+  setStep(4);
+  hide('#sec-target');
+  show('#sec-progress');
+  $('#prog-title').textContent = '正在生成';
+  $('#prog-msg').textContent = '共 ' + rows.length + ' 词';
+  $('#prog-pct').textContent = '0%';
+  setBar(2, false);
+  etaReset();          // 重新生成时清掉上一轮的采样，别把两次的速率混在一起
+  setLog(['提交生成：' + S.mode + ' → ' + body.pack_id + '（' + rows.length + ' 词）']);
+  hide('#retry');
+  show('#cancel');
+
+  postJSON('/api/build', body).then(function(d){
+    S.buildJob = d.job_id;
+    poll(S.buildJob, onBuildState);
+  }).catch(function(e){
+    busy(false);
+    // 409 = 包内已有同名词条（后端 _dup_guard）：回到目标卡把理由贴出来，
+    // 而不是把人扔到「出错了」那屏 —— 他要做的是重新勾选分页方式
+    if (e.status === 409 && S.mode === 'merge') {
+      setStep(4);
+      hide('#sec-progress');
+      show('#sec-target');
+      var box = $('#merge-err');
+      if (box) { box.textContent = e.message; box.classList.remove('hidden'); }
+      return;
+    }
+    fail('生成请求失败：' + e.message);
+  });
+}
+
+function onBuildState(j){
+  $('#phase').textContent = PHASES[j.phase] || j.phase || '—';
+  var p = Number(j.progress || 0);
+  $('#prog-pct').textContent = Math.round(p) + '%';
+  setBar(p, j.state === 'queued');
+  if (j.message) $('#prog-msg').textContent = j.message;
+  if (j.log_tail) setLog(j.log_tail);
+  if (j.state === 'queued') etaReset(); else etaSample(p);
+
+  if (j.state === 'done') { etaReset(); return afterBuild(j); }
+  if (j.state === 'canceled') { etaReset(); busy(false); fail('已取消生成', {back: true}); return; }
+  if (j.state === 'interrupted') { etaReset(); busy(false); fail('服务重启导致生成中断，请重新开始'); return; }
+  if (j.state === 'error') { etaReset(); busy(false); fail(j.error || '生成失败'); }
+}
+
+function afterBuild(j){
+  var r = j.result || {};
+  busy(false);
+  hide('#sec-progress');
+  show('#sec-done');
+  // 「书里本来就重复」的词被放行了 —— 这里如实说出来，不能让用户事后才发现
+  var dw = r.dup_warnings || j.dup_warnings || [];
+  var dwBox = $('#done-warn');
+  if (dwBox) {
+    if (dw.length) { dwBox.textContent = dw.join('；'); dwBox.classList.remove('hidden'); }
+    else { dwBox.textContent = ''; dwBox.classList.add('hidden'); }
+  }
+  // 生成出来的是词库包，里面一律是「页」——这里不要再沿用校对阶段的「组」
+  $('#done-title').textContent = '已生成 ' + (r.added_pages || 0) + ' 页 · ' +
+    (r.words || 0) + ' 词';
+  $('#done-sub').textContent = '词库：' + (r.pack || r.pack_id || '') +
+    '（共 ' + (r.pages || 0) + ' 页）';
+  $('#k-pages').textContent = r.added_pages || 0;
+  $('#k-words').textContent = r.words || 0;
+  $('#k-total').textContent = r.pages || 0;
+  var link = $('#open-pack');
+  link.setAttribute('href', r.url || '#');
+  // 左上角固定回工作台，不跟着"最新生成的包"飘（语义上它是「词库列表」）
+  loadPacks();
+  toast('生成完成，点「打开播放器」查看');
+}
+
+/* ───────────── 重置 ───────────── */
+/* 「重新开始」= 完全重置（连已选文件一起清掉） */
+function resetToUpload(){ goUpload(false); }
+
+/* 「返回上一步」= 只退一步，已选的文件/勾选都留着，改一下就能重来 */
+function backStep(){
+  // 生成阶段取消 → 退回「选目标」卡；解析阶段取消 → 退回上传卡
+  if (S.buildJob || (S.step >= 4 && S.groups.length)) {
+    S.polling = false; S.activeJob = null; S.buildJob = null;
+    hide('#sec-progress'); hide('#sec-done');
+    hide('#back'); hide('#retry');
+    show('#cancel'); $('#cancel').disabled = false;
+    show('#sec-target');
+    setStep(4);
+    if (typeof updateMergeHint === 'function') updateMergeHint();
+    return;
+  }
+  goUpload(true);
+}
+
+function goUpload(keepFile){
+  S.doc = null; S.parseJob = null; S.buildJob = null; S.groups = [];
+  S.activeJob = null; S.polling = false;
+  if (!keepFile) S.pendingFile = null;
+  $('#log').textContent = '';
+  $('#prog-pct').textContent = '0%';
+  setBar(0, false);
+  hide('#sec-progress'); hide('#sec-review'); hide('#sec-target'); hide('#sec-done');
+  hide('#rv-warn'); hide('#done-warn');
+  hide('#back'); hide('#retry');
+  show('#cancel'); $('#cancel').disabled = false;
+  renderPicked();                  // 有保留的文件就还显示着，没有就回到「请选择文件」
+  show('#sec-upload');
+  setStep(1);
+  loadPacks();
+}
+
+function fmtSize(n){
+  if (n < 1024) return n + ' B';
+  if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+  return (n / 1048576).toFixed(1) + ' MB';
+}
+
+/* 排查 / 门禁钩子：只有 ?debug=1 才挂到 window（默认不挂，页面行为一点没变）。
+   为什么需要：整段脚本在 IIFE 里，CDP 和控制台都够不到内部函数 ——
+   而「预计完成时间」这类推算，光看着对不算数，得能让门禁喂一串假进度进来验。 */
+if (/[?&]debug=1/.test(location.search)) {
+  window.__gen = { etaSample: etaSample, etaTick: etaTick, etaReset: etaReset,
+                   etaRate: etaRate, etaState: ETA, onBuildState: onBuildState };
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', boot);
+} else {
+  boot();
+}
+})();
+</script>
+</body>
+</html>

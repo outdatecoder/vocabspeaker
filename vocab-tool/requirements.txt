@@ -1,0 +1,24 @@
+# vocab-tool 依赖（版本为本机实测可用的组合）
+#
+# 安装（清华镜像可能返回 from versions: none，此时改用官方源）：
+#   pip install -r requirements.txt
+#   pip install -r requirements.txt --index-url https://pypi.org/simple \
+#       --trusted-host pypi.org --trusted-host files.pythonhosted.org
+#
+# 自检：python build_vocab.py doctor
+
+# PDF 抽取（find_tables + 坐标聚类）
+pymupdf==1.28.2
+
+# TTS。⚠️ 必须 >= 7.3.1：
+#   7.2.8 及更早用 v1 令牌（Sec-MS-GEC-Version: 1-…），在国内出口会被微软拒绝（403）；
+#   7.3.1 起改用 v2 令牌，国内出口可直连，无需代理/VPN。
+#   清华镜像目前没有 7.3.x，需走官方 PyPI 安装。
+edge-tts>=7.3.1
+
+# 音频拼接 / 静音检测（内置 ffmpeg 二进制，无需另装）
+imageio-ffmpeg==0.6.0
+
+# Word(.docx) 解析。⚠️ 包名是 python-docx，模块名是 docx；
+#   `pip install docx` 装的是另一个早已废弃的包，不要用。
+python-docx==1.2.0
