@@ -13,8 +13,10 @@
 import io
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 
 sys.stdout.reconfigure(encoding="utf-8")
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -136,14 +138,23 @@ def main():
             .replace("</body>", PROBE + "</body>", 1))
 
     dom = os.path.join(pack, "_probe_dom.html")
-    with open(dom, "w", encoding="utf-8") as f:
-        subprocess.run([EDGE, "--headless=new", "--disable-gpu", "--no-sandbox",
-                        "--autoplay-policy=no-user-gesture-required",
-                        "--user-data-dir=" + os.path.join(HERE, "_edgeprof_probe"),
-                        "--virtual-time-budget=30000", "--dump-dom",
-                        "file:///" + tmp.replace("\\", "/")],
-                       stdout=f, stderr=subprocess.DEVNULL)
-    h = io.open(dom, encoding="utf-8", errors="replace").read()
+    # profile 放 %TEMP% 的独立目录，跑完就删（与 _cdp_*.py 一致）。
+    # 原来用固定目录 vocab-tool\_edgeprof_probe：每跑一次长回 8~60 MB，
+    # 两个 probe 并行还会共用同一个 profile（Edge 按单实例处理，结果不可信）。
+    prof = tempfile.mkdtemp(prefix="edge_probe_")
+    try:
+        with open(dom, "w", encoding="utf-8") as f:
+            subprocess.run([EDGE, "--headless=new", "--disable-gpu", "--no-sandbox",
+                            "--autoplay-policy=no-user-gesture-required",
+                            "--user-data-dir=" + prof,
+                            "--virtual-time-budget=30000", "--dump-dom",
+                            "file:///" + tmp.replace("\\", "/")],
+                           stdout=f, stderr=subprocess.DEVNULL)
+        h = io.open(dom, encoding="utf-8", errors="replace").read()
+    finally:
+        # subprocess.run 已经等到 Edge 退出；真删不掉时 ignore_errors 让临时目录留在 %TEMP% 里，
+        # 也不该让一个清理失败掩盖真正的探针结果。
+        shutil.rmtree(prof, ignore_errors=True)
     m = re.search(r'<pre id="testout">([\s\S]*?)</pre>', h)
     body = m.group(1) if m else ""
     lines = [l.strip() for l in body.split("\n")
