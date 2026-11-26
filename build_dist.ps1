@@ -62,8 +62,14 @@ $Prod = @(
     "vocab-tool\generator.html",
     "vocab-tool\start_pet.bat",
     "vocab-tool\requirements.txt",
+    # Word COM page scan: webgen.pagescan() joins HERE + "_word_pages.ps1" and
+    # raises 400 when it is missing, so "paged by real Word pages" dies without it
+    "vocab-tool\_word_pages.ps1",
     "pet-player-sketch\index.html",
-    "HOWTO.txt"
+    "HOWTO.txt",
+    # the folder ships MuPDF (AGPL) and FFmpeg (LGPL/GPL) binaries - the
+    # licence notice has to travel with them, not stay in the repo
+    "LICENSE"
 )
 foreach ($f in $Prod) {
     if (-not (Test-Path (Join-Path $Root $f))) { Fail "missing file: $f" }
