@@ -22,3 +22,10 @@ imageio-ffmpeg==0.6.0
 # Word(.docx) 解析。⚠️ 包名是 python-docx，模块名是 docx；
 #   `pip install docx` 装的是另一个早已废弃的包，不要用。
 python-docx==1.2.0
+
+# 这两个本来是传递依赖（python-docx 要 lxml、edge-tts 要 aiohttp），
+# 但 build_dist.ps1 的 $pkgs 是**显式**把它们拷进便携运行时的，缺了就装不全：
+#   lxml    —— python-docx 解析 .docx 的 XML，没有它 docx 直接 ImportError
+#   aiohttp —— edge-tts 的 WebSocket 客户端；门禁里的 _cdp_*.py 也用它连 CDP
+lxml==6.1.3
+aiohttp==3.14.3
