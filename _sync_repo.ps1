@@ -1,29 +1,38 @@
 <#
-  _sync_repo.ps1 - keep the development copy and the publishable repo byte-identical.
+  _sync_repo.ps1 - keep the publishable repo a faithful mirror of the project.
 
-  WHY: the project lives in two directories on the same disk:
-      DEV  = <parent of this repo>\        (vocab-tool\, pet-player-sketch\, build_dist.ps1)
-      REPO = this folder (vocabspeaker\)    (what git pushes, what others clone)
-  Nothing enforced that they stayed in sync - it was "remember to copy". This script
-  makes it checkable: no arguments = report only, -Sync = copy then re-check.
+  WHY: the project lives in two places on this disk, plus the docs live on another:
+      DEV   = <parent of this repo>\        vocab-tool\, pet-player-sketch\, build_dist.ps1, AGENTS.md
+      REPO  = this folder (vocabspeaker\)    what git pushes, what others clone
+      DOCS  = -DocsRoot (default: the IDE workspace folder, another drive)
+  Nothing enforced that they stayed in sync - it was "remember to copy".
 
-  DIRECTION MATTERS. Most files have DEV as the source of truth (the code is edited
-  there). README.md is the opposite: it is the page a visitor sees on GitHub and it
-  travels with the Releases, so it is edited in REPO and mirrored back to DEV.
-  Do not flip a file between the two lists without saying why in the commit message.
+  No arguments = report only (exit 1 when anything differs). -Sync = copy then re-verify.
 
-  ASCII only on purpose: Windows PowerShell 5.1 reads a BOM-less .ps1 as ANSI,
-  so any CJK character here can break the quoting (see AGENTS.md section 4).
+  DIRECTION MATTERS. Three groups, three directions:
+    1. code  DEV -> REPO     (the code is edited in DEV)
+    2. README REPO -> DEV    (it is the public front page and ships with Releases)
+    3. docs  DOCS -> REPO\docs  (long-form docs are edited in the IDE workspace;
+              a mirror in the repo means a dead disk does not take the design
+              history with it). AGENTS.md comes from DEV (group 1) because it is
+              edited next to the code; its .learnings\ neighbours come from DOCS.
+  Do not flip a file between groups without saying why in the commit message.
+
+  ASCII only on purpose: Windows PowerShell 5.1 reads a BOM-less .ps1 as ANSI, so
+  any CJK character here can break the quoting (see AGENTS.md section 4). The doc
+  file names are therefore discovered with a *.md wildcard, never spelled out.
 
   Usage
     powershell -NoProfile -ExecutionPolicy Bypass -File vocabspeaker\_sync_repo.ps1
     powershell -NoProfile -ExecutionPolicy Bypass -File vocabspeaker\_sync_repo.ps1 -Sync
+    ... -DocsRoot "D:\some\other\docs"
 
-  Exit code: 0 = after this run every file on both lists is identical, 1 = differences
-  remain (or a file is missing / empty). A gate can rely on the exit code.
+  Exit code: 0 = every file is identical after this run, 1 = differences remain
+  (or a source is missing / empty). A gate can rely on the exit code.
 #>
 param(
-    [switch]$Sync
+    [switch]$Sync,
+    [string]$DocsRoot = 'C:\Users\Pengc\CodeBuddy\20261012091910'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -31,19 +40,19 @@ $ErrorActionPreference = 'Stop'
 $repo = $PSScriptRoot
 if (-not $repo) { $repo = Split-Path -Parent $MyInvocation.MyCommand.Path }
 $dev = Split-Path -Parent $repo
-$devTool = Join-Path $dev 'vocab-tool'
 
 function Fail([string]$msg) {
     Write-Host "ERROR: $msg" -ForegroundColor Red
     exit 1
 }
 
-if (-not (Test-Path (Join-Path $devTool 'serve.py'))) {
-    Fail ("dev copy not found. This script must sit in <dev>\vocabspeaker\, and <dev>\vocab-tool\serve.py must exist.")
+if (-not (Test-Path (Join-Path $dev 'vocab-tool\serve.py'))) {
+    Fail "dev copy not found. This script must sit in <dev>\vocabspeaker\, and <dev>\vocab-tool\serve.py must exist."
 }
 
-# dev -> repo. The code is edited in DEV; the repo is the copy that gets pushed.
+# 1. code: DEV -> REPO (identical relative paths)
 $ToRepo = @(
+    'AGENTS.md',
     'build_dist.ps1',
     'HOWTO.txt',
     'LICENSE',
@@ -73,7 +82,7 @@ $ToRepo = @(
     'vocab-tool\_restart_serve.ps1'
 )
 
-# repo -> dev. README is the public front page: it is edited in REPO, mirrored to DEV.
+# 2. public front page: REPO -> DEV
 $ToDev = @(
     'README.md'
 )
@@ -83,64 +92,84 @@ function Get-Sha([string]$p) {
     return (Get-FileHash -Algorithm SHA256 -Path $p).Hash.Substring(0, 12)
 }
 
-$ok = 0
-$diff = 0
-$missing = 0
-$synced = 0
-$skipped = 0
+# Returns ok | synced | diff | missing | empty
+function Sync-One([string]$src, [string]$dst, [string]$label) {
+    $hs = Get-Sha $src
+    if ($hs -eq 'MISSING') {
+        Write-Host ("MISSING  {0}  ({1})" -f $dst, $label) -ForegroundColor Red
+        return 'missing'
+    }
+    # Never let an empty source overwrite a real file: a 0-byte start_pet.bat
+    # sat in the docs folder for ten days and looked like a working launcher.
+    if ((Get-Item $src).Length -eq 0) {
+        Write-Host ("EMPTY    {0}  (source is 0 bytes, not copied)" -f $dst) -ForegroundColor Red
+        return 'empty'
+    }
+    $hd = Get-Sha $dst
+    if ($hs -eq $hd) { return 'ok' }
+
+    if (-not $Sync) {
+        Write-Host ("DIFF     {0}  {1} != {2}  ({3})" -f $dst, $hd, $hs, $label) -ForegroundColor Yellow
+        return 'diff'
+    }
+
+    $dstDir = Split-Path -Parent $dst
+    if ($dstDir -and -not (Test-Path $dstDir)) { New-Item -ItemType Directory -Force -Path $dstDir | Out-Null }
+    Copy-Item -Path $src -Destination $dst -Force
+    $h2 = Get-Sha $dst
+    if ($h2 -eq $hs) {
+        Write-Host ("SYNC     {0}  {1} -> {2}  ({3})" -f $dst, $hd, $h2, $label) -ForegroundColor Cyan
+        return 'synced'
+    }
+    Write-Host ("FAILED   {0}  copy did not verify ({1} != {2})" -f $dst, $h2, $hs) -ForegroundColor Red
+    return 'diff'
+}
+
+$count = @{ ok = 0; synced = 0; diff = 0; missing = 0; empty = 0; skip = 0 }
 
 Write-Host "dev  : $dev"
 Write-Host "repo : $repo"
+Write-Host "docs : $DocsRoot"
 Write-Host "mode : $(if ($Sync) { 'SYNC (copy then verify)' } else { 'CHECK (read only)' })"
 Write-Host ""
 
-foreach ($item in @(
-        @{ list = $ToRepo; srcRoot = $dev; dstRoot = $repo; label = 'dev -> repo' },
-        @{ list = $ToDev; srcRoot = $repo; dstRoot = $dev; label = 'repo -> dev' }
-    )) {
+foreach ($rel in $ToRepo) {
+    $st = Sync-One (Join-Path $dev $rel) (Join-Path $repo $rel) 'dev -> repo'
+    $count[$st]++
+}
+foreach ($rel in $ToDev) {
+    $st = Sync-One (Join-Path $repo $rel) (Join-Path $dev $rel) 'repo -> dev'
+    $count[$st]++
+}
 
-    foreach ($rel in $item.list) {
-        $src = Join-Path $item.srcRoot $rel
-        $dst = Join-Path $item.dstRoot $rel
-        $hs = Get-Sha $src
-        $hd = Get-Sha $dst
-
-        if ($hs -eq 'MISSING') {
-            Write-Host ("MISSING  {0}  (source: {1})" -f $rel, $item.label) -ForegroundColor Red
-            $missing++
-            continue
-        }
-        # Never let an empty source overwrite a real file: a 0-byte start_pet.bat
-        # already sat in the docs folder for ten days and looked like a working launcher.
-        if ((Get-Item $src).Length -eq 0) {
-            Write-Host ("EMPTY    {0}  (source is 0 bytes, not copied)" -f $rel) -ForegroundColor Red
-            $skipped++
-            continue
-        }
-        if ($hs -eq $hd) {
-            $ok++
-            continue
-        }
-
-        if (-not $Sync) {
-            Write-Host ("DIFF     {0}  {1} != {2}  ({3})" -f $rel, $hd, $hs, $item.label) -ForegroundColor Yellow
-            $diff++
-            continue
-        }
-
-        $dstDir = Split-Path -Parent $dst
-        if (-not (Test-Path $dstDir)) { New-Item -ItemType Directory -Force -Path $dstDir | Out-Null }
-        Copy-Item -Path $src -Destination $dst -Force
-        $h2 = Get-Sha $dst
-        if ($h2 -eq $hs) {
-            Write-Host ("SYNC     {0}  {1} -> {2}  ({3})" -f $rel, $hd, $h2, $item.label) -ForegroundColor Cyan
-            $synced++
-        }
-        else {
-            Write-Host ("FAILED   {0}  copy did not verify ({1} != {2})" -f $rel, $h2, $hs) -ForegroundColor Red
-            $diff++
-        }
+# 3. docs: DOCS -> REPO\docs   (and .learnings\*.md -> REPO\.learnings\)
+if (-not (Test-Path $DocsRoot)) {
+    Write-Host ("SKIP docs  (docs root not found: {0})" -f $DocsRoot) -ForegroundColor Yellow
+    $count['skip']++
+}
+else {
+    $docPairs = @()
+    Get-ChildItem $DocsRoot -File -Filter '*.md' -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -ne 'AGENTS.md' } |
+        ForEach-Object { $docPairs += , @($_.FullName, (Join-Path 'docs' $_.Name)) }
+    $learn = Join-Path $DocsRoot '.learnings'
+    if (Test-Path $learn) {
+        Get-ChildItem $learn -File -Filter '*.md' -ErrorAction SilentlyContinue |
+            ForEach-Object { $docPairs += , @($_.FullName, (Join-Path '.learnings' $_.Name)) }
     }
+    if ($docPairs.Count -eq 0) {
+        Write-Host "SKIP docs  (no *.md found under the docs root)" -ForegroundColor Yellow
+        $count['skip']++
+    }
+    foreach ($pair in $docPairs) {
+        $st = Sync-One $pair[0] (Join-Path $repo $pair[1]) 'docs -> repo'
+        $count[$st]++
+    }
+
+    # AGENTS.md has a third copy in the IDE workspace. Keep all three identical from
+    # the DEV copy, so "which AGENTS.md am I reading" never becomes a question.
+    $st = Sync-One (Join-Path $dev 'AGENTS.md') (Join-Path $DocsRoot 'AGENTS.md') 'dev -> workspace'
+    $count[$st]++
 }
 
 # Repo-side extras: files in vocab-tool that no list mentions. Catches "added a new
@@ -156,12 +185,13 @@ if ($extra.Count -gt 0) {
 }
 
 Write-Host ""
-Write-Host ("identical {0}   synced {1}   diff {2}   missing {3}   empty-skip {4}" -f $ok, $synced, $diff, $missing, $skipped)
-if ($diff -gt 0 -or $missing -gt 0 -or $skipped -gt 0) {
+Write-Host ("identical {0}   synced {1}   diff {2}   missing {3}   empty-skip {4}   skipped-groups {5}" -f `
+        $count['ok'], $count['synced'], $count['diff'], $count['missing'], $count['empty'], $count['skip'])
+if ($count['diff'] -gt 0 -or $count['missing'] -gt 0 -or $count['empty'] -gt 0) {
     if (-not $Sync) { Write-Host "run with -Sync to copy the source side over." -ForegroundColor Yellow }
     exit 1
 }
-if ($synced -gt 0) {
+if ($count['synced'] -gt 0) {
     Write-Host "now run: git -C $repo status --short   (then commit the updated copies)" -ForegroundColor Yellow
 }
 Write-Host "all files identical" -ForegroundColor Green
