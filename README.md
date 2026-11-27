@@ -7,13 +7,23 @@
 
 ## 下载（不想配环境就看这一节）
 
-| 你要的 | 去哪儿拿 | 解压后怎么开始 |
-|---|---|---|
-| **只想听 / 只想生成，不装 Python** | 右侧 **Releases** → `vocabspeaker-win64-<日期>.zip`（Windows 10/11 64 位） | 解压 → 双击 `vocab-tool\start_pet.bat` → 浏览器打开 `http://127.0.0.1:8901/` |
-| 想自己改代码 | `git clone` 本仓库 | `pip install -r vocab-tool/requirements.txt`，再双击同一个 bat |
+**[⬇ 下载 Windows 便携包（最新版）](https://github.com/outdatecoder/vocabspeaker/releases/latest)** —— 约 85 MB，Windows 10/11 64 位。
 
-便携包**自带 Python 3.13 运行时**（`runtime\`）、PDF 解析（PyMuPDF）与 FFmpeg 7.1，
-目标机器不需要装 Python、Office、ffmpeg。
+> 也可以从仓库右侧 **Releases** 进入，选最新版本里的 `vocabspeaker-win64-<日期>.zip`。
+
+三步就能用：
+
+1. **解压** zip（右键「全部解压缩」；不要在压缩包里直接双击）
+2. 进入解压出来的 `vocabspeaker-win64\` 文件夹，双击 **`vocab-tool\start_pet.bat`**
+3. 浏览器会自动打开 `http://127.0.0.1:8901/`，看到「PET主题词汇」「初中英语词汇表」两张卡片就成了
+
+**只想听、不打算生成新词库？** 连 bat 都不用开：解压后直接双击
+`vocab-tool\packs\初中英语词汇表\index.html`，离线就能播。
+
+便携包**自带 Python 3.13 运行时**（`runtime\`）、PDF 解析（PyMuPDF 1.28.2）与 FFmpeg 7.1，
+目标机器不需要装 Python、Office、ffmpeg。生成新词库要联网（edge-tts 是云端服务），播放完全离线。
+
+想自己改代码：`git clone` 本仓库 → `pip install -r vocab-tool/requirements.txt` → 双击同一个 bat。
 
 - 生成的词库在 `vocab-tool\packs\<词库名>\`，双击里面的 `index.html` 就能听，**不联网**。
 - 合成新音频要联网（edge-tts 是云端服务），已生成过的词命中 `vocab-tool\cache\`，不会重复调用。
