@@ -239,6 +239,18 @@ def _log(job, line):
         job["updated"] = time.time()
 
 
+def _scanned_hint(job):
+    """从子进程日志里认出「这份 PDF 是扫描件」那句（build_vocab.SCANNED_PDF_HINT）。
+
+    为什么要透传：用户看到"解析失败（退出码 1）"只能再问一遍；而这句话直接告诉他
+    该怎么做。**只认一个固定片段**，其他失败原因一律不替他解释（R6：宁可少承诺）。
+    """
+    for line in reversed(list(job.get("log_tail") or [])):
+        if "看起来是扫描件" in line:
+            return line.strip()
+    return ""
+
+
 def _finish(job, state, message="", result=None, error=None, progress=None):
     with _JOBS_LOCK:
         job["state"] = state
@@ -603,9 +615,10 @@ def _run_parse(job, meta, with_pages):
             return
         csv_path = os.path.join(out_dir, "words.csv")
         if rc != 0 or not os.path.isfile(csv_path):
+            hint = _scanned_hint(job)
             _finish(job, "error",
-                    error="解析失败（退出码 %s）—— 详见上方日志" % rc,
-                    message="解析失败")
+                    error=hint or ("解析失败（退出码 %s）—— 详见上方日志" % rc),
+                    message="这份 PDF 是扫描件" if hint else "解析失败")
             return
         rows = _read_words_csv(csv_path)
         if not rows:

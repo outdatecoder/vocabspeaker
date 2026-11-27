@@ -526,8 +526,46 @@ def run(port):
     # ── O. Word 真实分页（勾选才跑；含缓存命中）─────────────────
     test_word_pages(port)
 
+    # ── O2. 扫描件 PDF：必须给「去走 OCR」的可行动提示，不许空词库 ──
+    test_scanned_pdf(port)
+
     # ── P. 工作台编辑：改名 / 删除（全部用副本）──────────────────
     test_pack_manage(port)
+
+
+def test_scanned_pdf(port):
+    """扫描件 PDF（有页面、无文字层）：任务要失败，且失败原因要指路，不是"0 词"。
+
+    现场造一份只有色块的 PDF，不在仓库里放二进制样本。
+    """
+    import pymupdf
+    doc = pymupdf.open()
+    page = doc.new_page()
+    page.draw_rect(pymupdf.Rect(60, 60, 420, 420),
+                   color=(0, 0, 0), fill=(0.85, 0.85, 0.85))
+    data = doc.tobytes()
+    doc.close()
+
+    st, resp = upload(port, "扫描件.pdf", data)
+    meta = jload(resp)
+    CREATED_DOCS.append(meta.get("doc_id"))
+    T("扫描件 PDF 能上传（魔数 %PDF- 仍通过）",
+      st == 200 and bool(meta.get("doc_id")), "%s %s" % (st, meta.get("error")))
+    if st != 200 or not meta.get("doc_id"):
+        return
+
+    st, resp = post_json(port, "/api/parse", {"doc_id": meta["doc_id"]})
+    jid = jload(resp).get("job_id")
+    CREATED_JOBS.append(jid)
+    job, _ = poll_job(port, jid or "0" * 12)
+    job = job or {}
+    err = job.get("error") or ""
+    T("扫描件 → 报「扫描件」并指路（不是笼统退出码）",
+      job.get("state") == "error" and "看起来是扫描件" in err,
+      "%s | %s" % (job.get("state"), err[:70]))
+    parse_dir = os.path.join(HERE, "work", "_parse", meta["doc_id"])
+    T("扫描件 → 不产出 words.csv（不生成空词库）",
+      not os.path.isfile(os.path.join(parse_dir, "words.csv")), parse_dir)
 
 
 def snapshot_dir(root):

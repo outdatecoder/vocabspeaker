@@ -286,6 +286,14 @@ def extract_pdf_page(page, page_no):
     return dict(page=page_no, pairs=pairs, strategy="coords", detail=how, warnings=warns)
 
 
+# 扫描件（有页面、但整个文件没有文字层）与"有字但不是词汇表"是两件完全不同的事：
+#   前者要 OCR（走 C 支线），后者要用户改格式。混成一句"所有页都没抽出词条"，
+#   用户只能再问一遍。这条消息会原样出现在网页的任务失败提示里（webgen 透传），
+#   修改措辞时注意 webgen._scanned_hint() 靠 "看起来是扫描件" 这个片段识别它。
+SCANNED_PDF_HINT = ("这份 PDF 看起来是扫描件（每页都没有文字层）。"
+                    "本期请先用手机扫描 App 或 Word 转成 docx，或把页面拍成图片。")
+
+
 def parse_pdf(path):
     """逐页抽取，**不在这里丢页**。
 
@@ -299,6 +307,13 @@ def parse_pdf(path):
     try:
         for i in range(doc.page_count):
             out.append(extract_pdf_page(doc[i], i + 1))
+        if out and not any(p["pairs"] for p in out):
+            # 一页词条都没抽到，先分清"没字"还是"有字但格式不对"：
+            #   · 全篇 0 个字符 = 扫描件（图片页）→ 直接告诉他路怎么走
+            #   · 有字 → 交给 cmd_parse 报逐页原因（表格结构/页眉页脚问题）
+            chars = sum(len(doc[i].get_text("text").strip()) for i in range(doc.page_count))
+            if chars == 0:
+                raise SystemExit(SCANNED_PDF_HINT)
     finally:
         doc.close()
     return out
